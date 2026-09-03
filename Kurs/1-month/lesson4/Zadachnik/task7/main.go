@@ -1,12 +1,17 @@
-﻿package main
+package main
+
+import "fmt"
 
 func main() {
 	var (
-		A int = 3
-		B int = 6
+		A      = 3
+		B      = 6
+		result = 1
 	)
 
-    for i:=A; i < B; i++ {
-        
-    }
+	for i := A; i <= B; i++ {
+		result *= i
+	}
+
+	fmt.Println(result)
 }

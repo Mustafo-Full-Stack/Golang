@@ -1,5 +1,16 @@
-﻿package main
+package main
+
+import "fmt"
 
 func main() {
-    println("task 8")
+	var (
+		A      = 3
+		B      = 6
+		result = 0
+	)
+
+	for i := A; i <= B; i++ {
+		result += i
+	}
+	fmt.Println(result)
 }
