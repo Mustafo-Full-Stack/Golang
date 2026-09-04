@@ -8,5 +8,5 @@ func main() {
 	for _, nums := range nums {
 		zarb *= nums
 	}
-	fmt.Println("Результать Умножение на 2 :", zarb)
+	fmt.Println("Результать Умножениеe на 2 :", zarb)
 }
