@@ -1,0 +1,8 @@
+github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/jwtk/jjwt v0.0.0-20240129002804-bf4168cdceb8 h1:IEp1vxBBywLQmMPhZN0QeYFz630FyRn81dpQb5hnrq8=
+github.com/jwtk/jjwt v0.0.0-20240129002804-bf4168cdceb8/go.mod h1:9d+MZdO/qNTCxANEeOpHj9FVd4AJ1h3WFOvLUVxMyNE=
+github.com/jwtk/jjwt v0.0.0-20250814193926-77aeda012c4e h1:3dtlzc7ZX7YwyX9jK73fDhZrop/oJqSg/sAktC2dw+U=
+github.com/jwtk/jjwt v0.0.0-20250814193926-77aeda012c4e/go.mod h1:9d+MZdO/qNTCxANEeOpHj9FVd4AJ1h3WFOvLUVxMyNE=
+github.com/jwtk/jjwt v0.0.0-20260903223749-fb71496164c7 h1:7NU7NGAxjXGd0nEGtSaHsVnwtGWkjom7tVcfTrEKnNg=
+github.com/jwtk/jjwt v0.0.0-20260903223749-fb71496164c7/go.mod h1:9d+MZdO/qNTCxANEeOpHj9FVd4AJ1h3WFOvLUVxMyNE=

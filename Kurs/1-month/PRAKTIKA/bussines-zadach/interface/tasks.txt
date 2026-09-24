@@ -1,0 +1,90 @@
+Давай реальную, но лёгкую задачу: уведомления пользователя.
+
+В продакшене интерфейсы часто используют, чтобы программа могла работать с разными реализациями: отправлять сообщение в консоль, email, Telegram и т. д.
+Задача
+
+Создай интерфейс Notifier:
+go
+
+type Notifier interface {
+	Notify(message string)
+}
+
+Создай структуру:
+go
+
+type ConsoleNotifier struct{}
+
+Добавь ей метод, который выводит сообщение:
+go
+
+func (c ConsoleNotifier) Notify(message string) {
+	fmt.Println(message)
+}
+
+Создай функцию:
+go
+
+func sendWelcomeMessage(n Notifier) {
+	n.Notify("Добро пожаловать!")
+}
+
+И используй её:
+go
+
+func main() {
+	notifier := ConsoleNotifier{}
+
+	sendWelcomeMessage(notifier)
+}
+
+Полный каркас:
+go
+
+package main
+
+import "fmt"
+
+type Notifier interface {
+	Notify(message string)
+}
+
+type ConsoleNotifier struct{}
+
+// Тебе нужно дописать метод Notify
+
+func sendWelcomeMessage(n Notifier) {
+	n.Notify("Добро пожаловать!")
+}
+
+func main() {
+	notifier := ConsoleNotifier{}
+
+	sendWelcomeMessage(notifier)
+}
+
+Ожидаемый результат:
+text
+
+Добро пожаловать!
+
+Главная идея:
+go
+
+func sendWelcomeMessage(n Notifier)
+
+Функция не знает, кто именно отправляет сообщение. Она знает только одно: объект умеет вызывать метод Notify.
+
+Позже можно добавить другой способ:
+go
+
+type TelegramNotifier struct{}
+
+func (t TelegramNotifier) Notify(message string) {
+	fmt.Println("Отправлено в Telegram:", message)
+}
+
+И та же функция будет работать без изменений:
+go
+
+sendWelcomeMessage(TelegramNotifier{})
