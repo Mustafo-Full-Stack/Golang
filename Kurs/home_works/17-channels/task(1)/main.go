@@ -3,5 +3,12 @@ package main
 import "fmt"
 
 func main() {
-    fmt.Println("Задача 1")
+	ch := make(chan string)
+
+	go func() {
+		ch <- "Привет из горутины!"
+	}()
+
+	v := <-ch
+	fmt.Println(v)
 }
