@@ -1,7 +1,16 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"task2/client"
+)
 
 func main() {
-	fmt.Println("Задача 2")
+	user, err := client.GetClient(1)
+	if err != nil {
+		fmt.Println("Ошибка:", err)
+		return
+	}
+	fmt.Println(user.Name, user.Email, user.Phone)
 }
