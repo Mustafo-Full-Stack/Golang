@@ -3,4 +3,3 @@ SELECT * FROM books
 
     SELECT * FROM books
     ORDER BY pages DESC LIMIT 3;
---
