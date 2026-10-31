@@ -1,12 +1,5 @@
-# Local configuration and editor/OS metadata
+# Local environment files
 **/.env
-**/.idea/
-**/__MACOSX/
-**/._*
-**/.DS_Store
 
-# Local logs
-*.log
-
-# Original archive contains local configuration and Git metadata
+# Original archive contains .env files and nested Git repositories.
 /Kurs/2-month/lesson22(http-server)-(project)/job-board.zip
