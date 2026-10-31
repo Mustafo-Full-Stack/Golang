@@ -1,0 +1,362 @@
+ШПАРГАЛКА: ЗАПУСК, ИНФРАСТРУКТУРА И ПРОВЕРКА API
+=================================================
+
+Все команды — из корня проекта (там, где docker-compose.infra.yaml).
+Нужны: Go, Docker Desktop (или Docker Engine + Compose plugin), make.
+
+
+1. ПЕРВЫЙ ЗАПУСК
+----------------
+
+cp .env.example .env            # локальные настройки
+make infra-up                   # Postgres, Redis, MinIO; дождаться healthy
+make run                        # API на http://localhost:8080
+tail -f app.log                 # логи приложения (APP_ENV=local пишет в файл)
+
+MinIO:
+  API       http://localhost:9000
+  Console   http://localhost:9001
+  login     minioadmin / minioadmin (из S3_ACCESS_KEY / S3_SECRET_KEY)
+
+Остановить API: Ctrl+C в терминале с make run.
+
+
+2. MAKE-КОМАНДЫ
+---------------
+
+make infra-up                   # поднять Postgres, Redis, MinIO
+make infra-down                 # остановить; данные сохраняются
+make infra-reset                # удалить данные и поднять заново (миграции с нуля)
+make run                        # запустить API
+
+
+3. ТО ЖЕ САМОЕ БЕЗ MAKE
+-----------------------
+
+docker compose -f docker-compose.infra.yaml up -d --wait
+docker compose -f docker-compose.infra.yaml down
+docker compose -f docker-compose.infra.yaml down -v
+go run ./cmd/api
+
+
+4. СОСТОЯНИЕ И ЛОГИ КОНТЕЙНЕРОВ
+-------------------------------
+
+docker compose -f docker-compose.infra.yaml ps
+docker compose -f docker-compose.infra.yaml logs -f
+docker compose -f docker-compose.infra.yaml logs -f postgres
+docker logs --tail 50 demo-postgres
+docker inspect --format '{{.State.Health.Status}}' demo-postgres
+docker inspect --format '{{.State.Health.Status}}' demo-minio
+
+
+5. POSTGRES
+-----------
+
+docker exec -it demo-postgres psql -U demo -d demo-db
+
+Внутри psql:
+  \dt                                      -- таблицы
+  \d users                                 -- структура
+  \d sessions
+  \d files
+  SELECT * FROM roles;                     -- роли
+  SELECT id, email, name, role_id FROM users;
+  SELECT id, user_id, device_type, created_at, expires_at
+    FROM sessions ORDER BY created_at DESC;
+  SELECT id, user_id, post_id, object_key, content_type, size_bytes FROM files;
+  \q
+
+Одной командой:
+docker exec demo-postgres psql -U demo -d demo-db -c "SELECT * FROM users;"
+
+Подключение из IDE:
+  host=localhost port=5432 user=demo password=demo database=demo-db
+
+
+6. REDIS
+--------
+
+docker exec -it demo-redis redis-cli
+
+Внутри redis-cli:
+  KEYS session:*                       -- ключи токенов (только для локальной отладки)
+  GET session:<id>:access              -- sha256 access-токена, не сам JWT
+  GET session:<id>:refresh             -- sha256 refresh-токена
+  TTL session:<id>:refresh             -- сколько секунд живёт
+  DEL session:<id>:access session:<id>:refresh   -- отозвать пару вручную
+  FLUSHALL                             -- разлогинить всех
+  exit
+
+<id> — это jti внутри JWT (у access и refresh одной пары он одинаковый).
+Посмотреть токен: https://jwt.io — только локальные, боевые туда не вставляем.
+
+
+7. MINIO
+--------
+
+Консоль: http://localhost:9001 → Object Browser → bucket demo-media.
+
+Через mc внутри контейнера:
+docker exec -it demo-minio mc alias set local http://localhost:9000 minioadmin minioadmin
+docker exec -it demo-minio mc ls local/demo-media
+docker exec -it demo-minio mc ls --recursive local/demo-media
+docker exec -it demo-minio mc stat local/demo-media/users/1/<object_key>
+
+Bucket приватный: прямые ссылки без подписи не работают, API отдаёт presigned URL.
+При удалении файла или поста объект в MinIO удаляется сразу.
+Неприкреплённый к посту файл живёт CLEANUP_UNATTACHED_TTL (24h), потом его удаляет очистка.
+
+
+8. ПРОВЕРКА API: БАЗОВЫЙ СЦЕНАРИЙ
+---------------------------------
+
+# Регистрация (роль всегда user; служебные роли так не получить)
+curl -i -X POST localhost:8080/api/v1/auth/register \
+  -d '{"email":"ivan@mail.com","password":"secret123","name":"Иван"}'
+
+# Вход. X-Device-Type: web | mobile; без заголовка — web, неизвестный — 400.
+curl -s -X POST localhost:8080/api/v1/auth/login \
+  -H 'X-Device-Type: mobile' \
+  -d '{"email":"ivan@mail.com","password":"secret123"}' > /tmp/login.json
+
+python3 - <<'PY'
+import json
+d = json.load(open('/tmp/login.json'))
+open('/tmp/access', 'w').write(d['access_token'])
+open('/tmp/refresh', 'w').write(d['refresh_token'])
+print('tokens saved')
+PY
+
+ACCESS=$(cat /tmp/access)
+
+# Профиль
+curl -i localhost:8080/api/v1/users/me -H "Authorization: Bearer $ACCESS"
+
+# Сессии
+curl -s localhost:8080/api/v1/sessions -H "Authorization: Bearer $ACCESS" | python3 -m json.tool
+
+# Выйти на всех других устройствах (текущая сессия останется)
+curl -i -X DELETE localhost:8080/api/v1/sessions -H "Authorization: Bearer $ACCESS"
+
+# Отозвать конкретную сессию
+curl -i -X DELETE localhost:8080/api/v1/sessions/<session_id> \
+  -H "Authorization: Bearer $ACCESS"
+
+
+9. ФАЙЛЫ И ПОСТ С ВЛОЖЕНИЕМ
+---------------------------
+
+# Любой PNG для теста (1x1)
+python3 - <<'PY'
+import base64
+open('/tmp/pixel.png','wb').write(base64.b64decode(
+ 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='))
+PY
+
+# Загрузка: multipart, поле file; ответ содержит id и presigned url
+curl -s -X POST localhost:8080/api/v1/files \
+  -H "Authorization: Bearer $ACCESS" -F 'file=@/tmp/pixel.png' > /tmp/file.json
+python3 -m json.tool /tmp/file.json
+FILE_ID=$(python3 -c "import json; print(json.load(open('/tmp/file.json'))['id'])")
+
+# Создать пост с файлами (до 10 своих неприкреплённых файлов)
+curl -i -X POST localhost:8080/api/v1/posts \
+  -H "Authorization: Bearer $ACCESS" \
+  -d "{\"title\":\"С фото\",\"content\":\"Текст\",\"file_ids\":[$FILE_ID]}"
+
+# Лента: файлы приходят вместе с постами
+curl -s 'localhost:8080/api/v1/posts?limit=20&offset=0' \
+  -H "Authorization: Bearer $ACCESS" | python3 -m json.tool
+
+# Неприкреплённый файл можно удалить; прикреплённый — 409; чужой неприкреплённый — 404
+curl -i -X DELETE localhost:8080/api/v1/files/$FILE_ID \
+  -H "Authorization: Bearer $ACCESS"
+
+# Проверить типы/лимиты
+curl -i -X POST localhost:8080/api/v1/files \
+  -H "Authorization: Bearer $ACCESS" -F 'file=@/etc/hosts'        # 415
+curl -i -X POST localhost:8080/api/v1/files \
+  -H "Authorization: Bearer $ACCESS" -F 'file=@/tmp/big.bin'      # 413, если > 10 МБ
+
+
+10. ПРОВЕРКА ТРАНЗАКЦИИ ПОСТА
+-----------------------------
+
+# Второй файл
+curl -s -X POST localhost:8080/api/v1/files \
+  -H "Authorization: Bearer $ACCESS" -F 'file=@/tmp/pixel.png' > /tmp/file2.json
+FILE2=$(python3 -c "import json; print(json.load(open('/tmp/file2.json'))['id'])")
+
+BEFORE=$(docker exec demo-postgres psql -U demo -d demo-db -tAc 'SELECT count(*) FROM posts')
+
+# Один файл настоящий, второй — нет: пост не должен создаться
+curl -i -X POST localhost:8080/api/v1/posts \
+  -H "Authorization: Bearer $ACCESS" \
+  -d "{\"title\":\"Откат\",\"content\":\"Текст\",\"file_ids\":[$FILE2,999999]}"
+
+AFTER=$(docker exec demo-postgres psql -U demo -d demo-db -tAc 'SELECT count(*) FROM posts')
+echo "posts before=$BEFORE after=$AFTER"       # числа равны
+docker exec demo-postgres psql -U demo -d demo-db \
+  -c "SELECT id, post_id FROM files ORDER BY id;"   # у FILE2 post_id = NULL
+
+
+11. ПРОВЕРКА РОЛЕЙ
+------------------
+
+# Регистрируем двух пользователей
+for u in bob auditor; do
+  curl -s -X POST localhost:8080/api/v1/auth/register \
+    -d "{\"email\":\"$u@mail.com\",\"password\":\"secret123\",\"name\":\"$u\"}" >/dev/null
+done
+
+# Локально назначаем роли (в production это делает администратор)
+docker exec demo-postgres psql -U demo -d demo-db -c "
+  UPDATE users SET role_id=(SELECT id FROM roles WHERE code='moderator') WHERE email='bob@mail.com';
+  UPDATE users SET role_id=(SELECT id FROM roles WHERE code='auditor') WHERE email='auditor@mail.com';"
+
+# Логинимся и сохраняем токены
+for u in bob auditor; do
+  curl -s -X POST localhost:8080/api/v1/auth/login \
+    -d "{\"email\":\"$u@mail.com\",\"password\":\"secret123\"}" > /tmp/$u.json
+  python3 -c "import json; d=json.load(open('/tmp/$u.json')); open('/tmp/${u}_access','w').write(d['access_token'])"
+done
+
+BOB=$(cat /tmp/bob_access)
+AUD=$(cat /tmp/auditor_access)
+
+# moderator может удалить чужой пост
+curl -i -X DELETE localhost:8080/api/v1/posts/1 -H "Authorization: Bearer $BOB"
+
+# auditor только читает: create/upload -> 403
+curl -i -X POST localhost:8080/api/v1/posts -H "Authorization: Bearer $AUD" \
+  -d '{"title":"x","content":"y"}'
+curl -i -X POST localhost:8080/api/v1/files -H "Authorization: Bearer $AUD" \
+  -F 'file=@/tmp/pixel.png'
+
+
+12. REFRESH И LOGOUT
+--------------------
+
+OLD_ACCESS=$(cat /tmp/access)
+OLD_REFRESH=$(cat /tmp/refresh)
+
+# Обмен refresh на новую пару: refresh передаётся в заголовке Authorization
+curl -s -X POST localhost:8080/api/v1/auth/refresh \
+  -H "Authorization: Bearer $OLD_REFRESH" > /tmp/refresh.json
+python3 -m json.tool /tmp/refresh.json
+ACCESS=$(python3 -c "import json; print(json.load(open('/tmp/refresh.json'))['access_token'])")
+
+# Сессия та же: id в списке не изменился, устройство осталось mobile
+curl -s localhost:8080/api/v1/sessions -H "Authorization: Bearer $ACCESS" | python3 -m json.tool
+
+# 401: старый access больше не действует
+curl -i localhost:8080/api/v1/users/me -H "Authorization: Bearer $OLD_ACCESS"
+
+# 401: старый refresh одноразовый
+curl -i -X POST localhost:8080/api/v1/auth/refresh \
+  -H "Authorization: Bearer $OLD_REFRESH"
+
+# После повторного старого refresh текущая пара тоже сгорает (так выглядит кража токена),
+# поэтому для logout залогиньтесь заново:
+curl -s -X POST localhost:8080/api/v1/auth/login \
+  -d '{"email":"ivan@mail.com","password":"secret123"}' > /tmp/login.json
+ACCESS=$(python3 -c "import json; print(json.load(open('/tmp/login.json'))['access_token'])")
+
+# Logout — обычная защищённая ручка, нужен действующий access
+curl -i -X POST localhost:8080/api/v1/auth/logout \
+  -H "Authorization: Bearer $ACCESS"                         # 204
+curl -i localhost:8080/api/v1/users/me \
+  -H "Authorization: Bearer $ACCESS"                         # 401
+
+
+13. ФОНОВАЯ ОЧИСТКА (CLEANUP)
+-----------------------------
+
+Cron раз в CLEANUP_INTERVAL (30m) делает два шага:
+
+  1. брошенные загрузки — файлы без поста старше CLEANUP_UNATTACHED_TTL (24h):
+                          удаляются запись и объект в MinIO
+  2. истёкшие сессии    — DELETE FROM sessions WHERE expires_at < now()
+
+Первый проход — через CLEANUP_INTERVAL после старта. Выключить: CLEANUP_ENABLED=false.
+
+# Логи очистки
+grep 'cleanup' app.log
+
+# --- Брошенная загрузка ---
+
+curl -s -X POST localhost:8080/api/v1/auth/login \
+  -d '{"email":"ivan@mail.com","password":"secret123"}' > /tmp/gc_login.json
+ACCESS=$(python3 -c "import json; print(json.load(open('/tmp/gc_login.json'))['access_token'])")
+
+# Загружаем файл и не прикрепляем его к посту
+curl -s -X POST localhost:8080/api/v1/files \
+  -H "Authorization: Bearer $ACCESS" -F 'file=@/tmp/pixel.png' > /tmp/gc_file.json
+FILE_ID=$(python3 -c "import json; print(json.load(open('/tmp/gc_file.json'))['id'])")
+
+# Делаем файл «старым» (только для локальной проверки)
+docker exec demo-postgres psql -U demo -d demo-db \
+  -c "UPDATE files SET created_at = now() - interval '2 days' WHERE id=$FILE_ID;"
+
+# Перезапустите API с коротким интервалом и подождите 10 секунд:
+CLEANUP_INTERVAL=10s make run
+
+grep 'cleanup: unattached files deleted' app.log           # count=1
+docker exec demo-postgres psql -U demo -d demo-db -tAc \
+  "SELECT count(*) FROM files WHERE id=$FILE_ID"            # 0
+
+# --- Истёкшая сессия ---
+
+SID=$(docker exec demo-postgres psql -U demo -d demo-db -tAc \
+  "SELECT id FROM sessions ORDER BY created_at DESC LIMIT 1" | tr -d '\r')
+docker exec demo-postgres psql -U demo -d demo-db \
+  -c "UPDATE sessions SET expires_at = now() - interval '1 hour' WHERE id='$SID';"
+
+# С CLEANUP_INTERVAL=10s через 10 секунд:
+grep 'cleanup: expired sessions deleted' app.log
+docker exec demo-postgres psql -U demo -d demo-db -tAc \
+  "SELECT count(*) FROM sessions WHERE id='$SID'"           # 0
+
+
+14. ЧАСТЫЕ ПРОБЛЕМЫ
+-------------------
+
+"port is already allocated"
+  Занят 5432, 6379, 9000 или 9001. Найти: lsof -i :5432
+  Остановить процесс или поменять порты в docker-compose.infra.yaml и .env.
+
+"connection refused" при make run
+  Инфраструктура не готова: make infra-up, затем
+  docker compose -f docker-compose.infra.yaml ps — все три контейнера healthy.
+
+MinIO: "pull access denied for minio/minio"
+  Официальный образ MinIO больше не публикуется в Docker Hub.
+  В compose используется bitnamilegacy/minio (тот же MinIO). Для production
+  зафиксируйте конкретный release-тег или используйте свой registry.
+
+"relation users does not exist"
+  База создана до появления миграций: make infra-reset.
+
+Изменил SQL в migrations/, а схема старая
+  Миграции выполняются только при первом создании базы:
+  make infra-reset (данные удалятся).
+
+Не видно логов в консоли
+  При APP_ENV=local логи пишутся в app.log: tail -f app.log.
+
+401 на всё после FLUSHALL или make infra-reset
+  Токены хранятся в Redis и удаляются вместе с ним: нужно залогиниться заново.
+
+415 на файл с правильным расширением
+  Тип файла определяется по содержимому, а не по имени. Разрешены JPEG, PNG,
+  WebP, GIF и PDF. Проверьте реальное содержимое файла.
+
+Неприкреплённый файл не удалился
+  Очистка удаляет только файлы старше CLEANUP_UNATTACHED_TTL (24h). Проверьте,
+  что в логе есть «cleanup: unattached files deleted», а не «... failed».
+
+Истёкшие сессии не исчезли сразу
+  Очистка идёт раз в CLEANUP_INTERVAL (30 минут), первый проход — через интервал
+  после старта. Для проверки: CLEANUP_INTERVAL=10s make run. В SQL expires_at
+  должен быть меньше now().

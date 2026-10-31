@@ -1,0 +1,238 @@
+openapi: 3.0.3
+info:
+  title: crud-api
+  version: 1.0.0
+  description: Регистрация, логин, логаут и профиль пользователя.
+servers:
+  - url: http://localhost:8080/api/v1
+tags:
+  - name: auth
+    description: Аутентификация
+  - name: users
+    description: Пользователи. Все ручки требуют Bearer-токен из /auth/login.
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Регистрация пользователя
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Пользователь создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          description: Невалидное тело запроса, пустые поля или пароль не подходит по длине
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidBody:
+                  value: { error: invalid request body }
+                invalidInput:
+                  value: { error: 'name, email and password are required' }
+                passwordTooShort:
+                  value: { error: password must be at least 8 characters }
+                passwordTooLong:
+                  value: { error: password must be at most 72 bytes }
+        '409':
+          description: Email уже занят
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example: { error: email already exists }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Логин
+      description: Возвращает токен, который передаётся в заголовке `Authorization` как `Bearer <token>`.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Успешный логин
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Невалидное тело запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example: { error: invalid request body }
+        '401':
+          description: Неверный email или пароль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example: { error: invalid email or password }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Логаут
+      description: Отзывает токен из заголовка `Authorization`.
+      operationId: logout
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Токен отозван
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /users/me:
+    get:
+      tags: [users]
+      summary: Текущий пользователь
+      description: Возвращает профиль пользователя, которому принадлежит токен.
+      operationId: getMe
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Профиль пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Пользователь не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example: { error: user not found }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  responses:
+    Unauthorized:
+      description: Токен не передан или невалиден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            missingToken:
+              value: { error: missing bearer token }
+            invalidToken:
+              value: { error: invalid token }
+
+    InternalError:
+      description: Внутренняя ошибка сервера
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example: { error: internal server error }
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          example: Bob
+        email:
+          type: string
+          format: email
+          description: Приводится к нижнему регистру.
+          example: bob@mail.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: От 8 символов и не больше 72 байт (ограничение bcrypt).
+          example: secret123
+
+    RegisterResponse:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: bob@mail.com
+        password:
+          type: string
+          format: password
+          example: secret123
+
+    LoginResponse:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          example: 53f28ee9-9569-4daa-945a-93cc17a96382
+
+    User:
+      type: object
+      required: [id, name, email, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Bob
+        email:
+          type: string
+          format: email
+          example: bob@mail.com
+        created_at:
+          type: string
+          format: date-time
+          example: '2026-10-29T18:11:14Z'
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

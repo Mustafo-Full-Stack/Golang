@@ -1,0 +1,378 @@
+openapi: 3.0.3
+info:
+  title: Трекер привычек
+  version: 1.0.0
+  description: Регистрация, вход и ежедневный учёт привычек. Пользователь видит только свои привычки.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: auth
+    description: Аутентификация
+  - name: habits
+    description: Привычки и отметки. Все ручки требуют Bearer-токен из /login.
+paths:
+  /sign-up:
+    post:
+      tags: [auth]
+      summary: Регистрация пользователя
+      operationId: signUp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignUpRequest'
+      responses:
+        '201':
+          description: Пользователь создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignUpResponse'
+        '400':
+          description: Невалидное тело запроса или пустые поля
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidBody:
+                  value: { error: invalid request body }
+                invalidInput:
+                  value: { error: required fields are missing }
+                passwordTooShort:
+                  value: { error: password must be at least 8 characters }
+                passwordTooLong:
+                  value: { error: password must be at most 72 bytes }
+        '409':
+          description: Пользователь с таким email уже есть
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example: { error: user already exists }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /login:
+    post:
+      tags: [auth]
+      summary: Вход
+      description: Возвращает JWT для аутентификации запросов к защищённым маршрутам.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Невалидное тело запроса или пустые поля
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidBody:
+                  value: { error: invalid request body }
+                invalidInput:
+                  value: { error: required fields are missing }
+        '401':
+          description: Неверный email или пароль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example: { error: invalid email or password }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /habits:
+    get:
+      tags: [habits]
+      summary: Список своих привычек
+      operationId: listHabits
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Привычки текущего пользователя
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Habit'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [habits]
+      summary: Создать привычку
+      operationId: createHabit
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHabitRequest'
+      responses:
+        '201':
+          description: Привычка создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Habit'
+        '400':
+          description: Пустое название или невалидное тело
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidBody:
+                  value: { error: invalid request body }
+                invalidInput:
+                  value: { error: required fields are missing }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /habits/{id}/check:
+    post:
+      tags: [habits]
+      summary: Отметить привычку за сегодня
+      description: Повторная отметка за тот же день не создаёт дубль и возвращает 409.
+      operationId: checkHabit
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HabitId'
+      responses:
+        '201':
+          description: Отметка сохранена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+              example: { status: checked }
+        '400':
+          description: Некорректный id в адресе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example: { error: invalid habit id }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Привычка уже отмечена сегодня
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example: { error: habit already checked today }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /habits/{id}/checks:
+    get:
+      tags: [habits]
+      summary: Отметки привычки по дням
+      operationId: listChecks
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/HabitId'
+      responses:
+        '200':
+          description: Даты, в которые привычка была выполнена
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HabitCheck'
+        '400':
+          description: Некорректный id в адресе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example: { error: invalid habit id }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    HabitId:
+      name: id
+      in: path
+      required: true
+      description: Идентификатор привычки
+      schema:
+        type: integer
+        format: int64
+        example: 1
+
+  responses:
+    Unauthorized:
+      description: Токен не передан или невалиден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            missingToken:
+              value: { error: missing bearer token }
+            invalidToken:
+              value: { error: invalid or missing token }
+
+    Forbidden:
+      description: Привычка принадлежит другому пользователю
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example: { error: access denied }
+
+    NotFound:
+      description: Привычка не найдена
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example: { error: not found }
+
+    InternalError:
+      description: Внутренняя ошибка сервера
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example: { error: internal server error }
+
+  schemas:
+    SignUpRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          example: Ali
+        email:
+          type: string
+          format: email
+          description: Email, по которому потом выполняется вход.
+          example: ali@mail.ru
+        password:
+          type: string
+          format: password
+          description: От 8 до 72 байт. Хранится только в виде bcrypt-хеша.
+          example: secret123
+
+    SignUpResponse:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: ali@mail.ru
+        password:
+          type: string
+          format: password
+          example: secret123
+
+    LoginResponse:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: JWT. В поле sub записан id пользователя.
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.signature
+
+    CreateHabitRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          example: Читать
+
+    Habit:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Читать
+        created_at:
+          type: string
+          format: date-time
+          example: '2026-10-31T10:00:00Z'
+
+    HabitCheck:
+      type: object
+      required: [date]
+      properties:
+        date:
+          type: string
+          format: date
+          example: '2026-10-31'
+
+    StatusResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: checked
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

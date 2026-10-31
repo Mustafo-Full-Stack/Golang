@@ -1,0 +1,772 @@
+openapi: 3.0.3
+
+info:
+  title: demo-project API
+  version: 2.0.0
+  description: |
+    API для работы с постами: регистрация, вход, сессии, файлы и роли.
+
+    **Токены.** Login возвращает пару JWT: `access_token` и `refresh_token`.
+    Access передаётся в `Authorization: Bearer <access_token>`, refresh при обмене —
+    так же, в `Authorization: Bearer <refresh_token>`. В access-токене лежит `role_id`. Оба токена привязаны
+    к сессии в Postgres, а их хеши лежат в Redis по ключам `session:<id>:access` и
+    `session:<id>:refresh`. Refresh одноразовый: после обмена старые токены не работают.
+
+    **Сессии.** Login создаёт сессию (id — UUID) с `device_type`, IP и User-Agent.
+    `X-Device-Type` принимает `web` или `mobile`; без заголовка — `web`.
+    Refresh выдаёт новую пару токенов для той же сессии. `GET /sessions` показывает
+    активные сессии; logout и отзыв сессии удаляют её вместе с токенами.
+
+    **Файлы.** Загрузка — multipart, поле `file`. Допустимы JPEG, PNG, WebP, GIF и PDF
+    до 10 МБ. Ссылка на файл — короткоживущий presigned URL MinIO.
+    `POST /posts` принимает `file_ids`: один пост — до 10 своих неприкреплённых файлов.
+    Файл, который не прикрепили к посту за 24 часа (`CLEANUP_UNATTACHED_TTL`), удаляется.
+    При удалении файла или поста объекты в MinIO удаляются сразу.
+
+    **Роли.** `user`/`employer`/`applicant` управляют своими постами, `moderator` и
+    `admin` — любыми, `auditor` и `support` — только читают.
+
+    **Ошибки** всегда в формате `{"error": "текст"}`.
+
+security:
+  - bearerAuth: []
+
+servers:
+  - url: http://localhost:8080
+    description: локальный запуск (make run)
+
+tags:
+  - name: auth
+    description: регистрация, вход, токены, выход
+  - name: sessions
+    description: активные сессии пользователя
+  - name: users
+    description: пользователи
+  - name: files
+    description: загрузка и чтение файлов
+  - name: posts
+    description: посты и вложения
+
+paths:
+  /api/v1/auth/register:
+    post:
+      tags: [auth]
+      summary: Регистрация
+      description: |
+        Email приводится к нижнему регистру. Роль всегда `user`: служебные роли
+        назначает администратор. Поле `role` из старых клиентов игнорируется.
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: ivan@mail.com
+              password: secret123
+              name: Иван
+      responses:
+        '201':
+          description: Пользователь создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email уже зарегистрирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: email already registered
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Вход
+      description: Создаёт сессию и пару токенов. Неизвестный email и неверный пароль дают один ответ.
+      operationId: login
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/DeviceType'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: ivan@mail.com
+              password: secret123
+      responses:
+        '200':
+          description: Пара токенов
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/InvalidCredentials'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Обменять refresh на новую пару
+      description: |
+        Refresh-токен передаётся в заголовке `Authorization: Bearer <refresh_token>`,
+        тела у запроса нет. Выдаёт новую пару для той же сессии и продлевает её.
+        Refresh одноразовый: старые access и refresh сразу перестают действовать.
+      operationId: refresh
+      security:
+        - refreshAuth: []
+      responses:
+        '200':
+          description: Новая пара токенов
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: Выход
+      description: |
+        Завершает текущую сессию: удаляет её и оба токена. Нужен действующий access-токен.
+      operationId: logout
+      responses:
+        '204':
+          description: Сессия закрыта
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/users/me:
+    get:
+      tags: [users]
+      summary: Текущий пользователь
+      operationId: getMe
+      responses:
+        '200':
+          description: Текущий пользователь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/sessions:
+    get:
+      tags: [sessions]
+      summary: Мои активные сессии
+      operationId: listSessions
+      responses:
+        '200':
+          description: Список сессий
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionList'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [sessions]
+      summary: Выйти на всех других устройствах
+      description: Отзывает все активные сессии, кроме текущей.
+      operationId: revokeOtherSessions
+      responses:
+        '204':
+          description: Остальные сессии закрыты
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/sessions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: id сессии из списка
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags: [sessions]
+      summary: Завершить сессию
+      operationId: revokeSession
+      responses:
+        '204':
+          description: Сессия завершена
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/files:
+    post:
+      tags: [files]
+      summary: Загрузить файл
+      description: |
+        `multipart/form-data`, поле `file`. Тип определяется по содержимому.
+        Допустимы JPEG, PNG, WebP, GIF и PDF; максимум 10 МБ.
+        Файл сначала не прикреплён: передайте его id в `file_ids` при создании поста.
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Файл загружен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/File'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/FileTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedFileType'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/files/{id}:
+    parameters:
+      - $ref: '#/components/parameters/FileID'
+    get:
+      tags: [files]
+      summary: Файл по id
+      description: |
+        Прикреплённый к посту файл доступен любому авторизованному пользователю.
+        Неприкреплённый — только владельцу или admin (иначе `404`).
+      operationId: getFile
+      responses:
+        '200':
+          description: Метаданные и presigned URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/File'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [files]
+      summary: Удалить неприкреплённый файл
+      description: |
+        Свой файл удаляет владелец, чужой — только admin. Удаляются запись и объект в MinIO.
+        Чужой неприкреплённый файл для остальных выглядит как несуществующий (`404`), как и в `GET`.
+      operationId: deleteFile
+      responses:
+        '204':
+          description: Файл удалён
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Файл уже прикреплён к посту
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: file is already attached to a post
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/posts:
+    get:
+      tags: [posts]
+      summary: Лента постов
+      description: Новые посты первыми. В каждом посте — его файлы и presigned URL.
+      operationId: listPosts
+      parameters:
+        - $ref: '#/components/parameters/PostsLimit'
+        - $ref: '#/components/parameters/PostsOffset'
+      responses:
+        '200':
+          description: Страница ленты и общее число постов
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [posts]
+      summary: Создать пост
+      description: |
+        Автор — пользователь из access-токена. `file_ids` прикрепляет до 10 своих
+        неприкреплённых файлов. Если хотя бы один файл недоступен — пост не создаётся
+        (одна транзакция).
+      operationId: createPost
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePostRequest'
+            example:
+              title: Мой первый пост
+              content: Привет, мир!
+              file_ids: [1, 2]
+      responses:
+        '201':
+          description: Пост создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/posts/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PostID'
+    get:
+      tags: [posts]
+      summary: Пост по id
+      operationId: getPost
+      responses:
+        '200':
+          description: Пост
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [posts]
+      summary: Редактировать пост
+      description: Автор, moderator или admin.
+      operationId: updatePost
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePostRequest'
+            example:
+              title: Обновлённый заголовок
+              content: Обновлённый текст поста
+      responses:
+        '204':
+          description: Пост обновлён
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [posts]
+      summary: Удалить пост
+      description: Автор, moderator или admin. Вместе с постом удаляются его файлы.
+      operationId: deletePost
+      responses:
+        '204':
+          description: Пост удалён
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: access_token из ответа login или refresh
+    refreshAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: refresh_token из ответа login или refresh — только для POST /auth/refresh
+
+  parameters:
+    DeviceType:
+      name: X-Device-Type
+      in: header
+      required: false
+      description: Тип устройства. Пусто — web, неизвестное значение — 400.
+      schema:
+        type: string
+        enum: [web, mobile]
+        default: web
+    PostsLimit:
+      name: limit
+      in: query
+      required: false
+      description: Размер страницы. По умолчанию 20, максимум 100.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    PostsOffset:
+      name: offset
+      in: query
+      required: false
+      description: Сколько постов пропустить. По умолчанию 0.
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    PostID:
+      name: id
+      in: path
+      required: true
+      description: id поста
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    FileID:
+      name: id
+      in: path
+      required: true
+      description: id файла
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password, name]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: от 8 символов и не больше 72 байт (ограничение bcrypt)
+        name:
+          type: string
+          maxLength: 100
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    TokenPair:
+      type: object
+      required: [access_token, refresh_token]
+      properties:
+        access_token:
+          type: string
+          description: JWT access, передаётся в Authorization
+        refresh_token:
+          type: string
+          description: одноразовый JWT для /auth/refresh
+
+    User:
+      type: object
+      required: [id, email, name, role, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          example: user
+        created_at:
+          type: string
+          format: date-time
+
+    Session:
+      type: object
+      required: [id, device_type, is_current, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        device_type:
+          type: string
+          enum: [web, mobile]
+        ip:
+          type: string
+          description: отсутствует, если IP не определён
+        user_agent:
+          type: string
+        is_current:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    SessionList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Session'
+
+    File:
+      type: object
+      required: [id, name, content_type, size_bytes, url]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        content_type:
+          type: string
+          enum: [image/jpeg, image/png, image/webp, image/gif, application/pdf]
+        size_bytes:
+          type: integer
+          format: int64
+        url:
+          type: string
+          format: uri
+          description: presigned URL с ограниченным сроком жизни
+
+    CreatePostRequest:
+      type: object
+      required: [title, content]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        content:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        file_ids:
+          type: array
+          description: id своих неприкреплённых файлов, максимум 10
+          maxItems: 10
+          items:
+            type: integer
+            format: int64
+            minimum: 1
+
+    UpdatePostRequest:
+      type: object
+      required: [title, content]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        content:
+          type: string
+          minLength: 1
+          maxLength: 10000
+
+    Post:
+      type: object
+      required: [id, user_id, title, content, files, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        content:
+          type: string
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/File'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PostList:
+      type: object
+      required: [items, limit, offset, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Post'
+        limit:
+          type: integer
+        offset:
+          type: integer
+        total:
+          type: integer
+          format: int64
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Битый JSON, multipart или данные не прошли проверку
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            invalidJSON:
+              value:
+                error: invalid json body
+            invalidInput:
+              value:
+                error: 'invalid input: password must be at least 8 characters'
+    InvalidCredentials:
+      description: Неверный email или пароль
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: invalid email or password
+    InvalidToken:
+      description: Токен не передан, недействителен, истёк, не того типа или его сессия закрыта
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            missing:
+              value:
+                error: missing bearer token
+            invalid:
+              value:
+                error: invalid or expired token
+    NotFound:
+      description: Объект не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: not found
+    Forbidden:
+      description: Недостаточно прав (чужой пост или роль только для чтения)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: forbidden
+    FileTooLarge:
+      description: Файл больше S3_MAX_UPLOAD_BYTES
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: file too large
+    UnsupportedFileType:
+      description: Тип файла не входит в allowlist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: unsupported file type
+    InternalError:
+      description: Внутренняя ошибка. Подробности — только в логе
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: internal server error
