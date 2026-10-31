@@ -1,5 +1,3 @@
-# Local environment files
 **/.env
 
-# Original archive contains .env files and nested Git repositories.
 /Kurs/2-month/lesson22(http-server)-(project)/job-board.zip
