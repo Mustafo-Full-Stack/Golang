@@ -1,0 +1,12 @@
+# Local configuration and editor/OS metadata
+**/.env
+**/.idea/
+**/__MACOSX/
+**/._*
+**/.DS_Store
+
+# Local logs
+*.log
+
+# Original archive contains local configuration and Git metadata
+/Kurs/2-month/lesson22(http-server)-(project)/job-board.zip
