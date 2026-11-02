@@ -13,7 +13,6 @@ const (
 	maxHabitNameRunes = 100
 )
 
-// User — пользователь, как он хранится в базе.
 type User struct {
 	ID           int64
 	Name         string
@@ -22,7 +21,6 @@ type User struct {
 	CreatedAt    time.Time
 }
 
-// Habit — привычка пользователя.
 type Habit struct {
 	ID        int64
 	UserID    int64
@@ -30,21 +28,18 @@ type Habit struct {
 	CreatedAt time.Time
 }
 
-// HabitCheck — отметка о выполнении привычки за один день.
 type HabitCheck struct {
 	ID      int64
 	HabitID int64
 	Date    time.Time
 }
 
-// RegisterInput — данные для регистрации.
 type RegisterInput struct {
 	Name     string
 	Email    string
 	Password string
 }
 
-// Validate нормализует поля и проверяет их перед работой с базой.
 func (in *RegisterInput) Validate() error {
 	in.Name = strings.TrimSpace(in.Name)
 	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
@@ -61,13 +56,11 @@ func (in *RegisterInput) Validate() error {
 	return nil
 }
 
-// LoginInput — данные для входа.
 type LoginInput struct {
 	Email    string
 	Password string
 }
 
-// Validate нормализует email и проверяет обязательные поля.
 func (in *LoginInput) Validate() error {
 	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
 	if in.Email == "" || in.Password == "" {
@@ -76,13 +69,11 @@ func (in *LoginInput) Validate() error {
 	return nil
 }
 
-// CreateHabitInput — данные для создания привычки.
 type CreateHabitInput struct {
 	UserID int64
 	Name   string
 }
 
-// Validate убирает пробелы по краям и проверяет длину названия.
 func (in *CreateHabitInput) Validate() error {
 	in.Name = strings.TrimSpace(in.Name)
 	if in.Name == "" || utf8.RuneCountInString(in.Name) > maxHabitNameRunes {
@@ -91,7 +82,6 @@ func (in *CreateHabitInput) Validate() error {
 	return nil
 }
 
-// Общие ошибки. Repository и service возвращают их, handler переводит их в HTTP-коды.
 var (
 	ErrNotFound           = errors.New("not found")
 	ErrInvalidInput       = errors.New("required fields are missing")

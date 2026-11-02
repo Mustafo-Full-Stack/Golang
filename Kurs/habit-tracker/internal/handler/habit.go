@@ -23,7 +23,6 @@ type checkResponse struct {
 	Date string `json:"date"`
 }
 
-// createHabit создаёт привычку текущего пользователя.
 func (h *Handler) createHabit(w http.ResponseWriter, r *http.Request) {
 	var req createHabitRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -47,7 +46,6 @@ func (h *Handler) createHabit(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// listHabits возвращает привычки текущего пользователя.
 func (h *Handler) listHabits(w http.ResponseWriter, r *http.Request) {
 	habits, err := h.habit.List(r.Context(), currentUserID(r))
 	if err != nil {
@@ -67,7 +65,6 @@ func (h *Handler) listHabits(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// checkHabit отмечает привычку на сегодня.
 func (h *Handler) checkHabit(w http.ResponseWriter, r *http.Request) {
 	habitID, err := parseID(r)
 	if err != nil {
@@ -83,7 +80,6 @@ func (h *Handler) checkHabit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"status": "checked"})
 }
 
-// listChecks возвращает отметки привычки по дням.
 func (h *Handler) listChecks(w http.ResponseWriter, r *http.Request) {
 	habitID, err := parseID(r)
 	if err != nil {
@@ -105,7 +101,6 @@ func (h *Handler) listChecks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// parseID читает {id} из адреса.
 func parseID(r *http.Request) (int64, error) {
 	return strconv.ParseInt(r.PathValue("id"), 10, 64)
 }

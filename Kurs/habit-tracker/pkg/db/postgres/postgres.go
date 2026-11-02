@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Config содержит параметры подключения к PostgreSQL.
 type Config struct {
 	Host     string
 	Port     string
@@ -19,7 +18,6 @@ type Config struct {
 	SSLMode  string
 }
 
-// New открывает пул соединений и проверяет, что база отвечает.
 func New(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 	pool, err := pgxpool.New(ctx, cfg.dsn())
 	if err != nil {
@@ -32,7 +30,6 @@ func New(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-// dsn собирает URL подключения с корректным экранированием пароля.
 func (cfg Config) dsn() string {
 	u := url.URL{
 		Scheme:   "postgres",

@@ -15,7 +15,6 @@ import (
 	"habit-tracker/pkg/db/postgres"
 )
 
-// Run собирает все слои приложения и запускает HTTP-сервер.
 func Run() error {
 	cfg, err := config.Load()
 	if err != nil {

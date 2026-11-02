@@ -8,7 +8,6 @@ import (
 	"habit-tracker/pkg/db/postgres"
 )
 
-// Config хранит настройки приложения из переменных окружения.
 type Config struct {
 	HTTPPort  string
 	JWTSecret string
@@ -16,7 +15,6 @@ type Config struct {
 	Postgres  postgres.Config
 }
 
-// Load читает переменные окружения и проверяет обязательные настройки.
 func Load() (*Config, error) {
 	ttl, err := time.ParseDuration(getEnv("JWT_TTL", "24h"))
 	if err != nil {
@@ -43,7 +41,6 @@ func Load() (*Config, error) {
 	}, nil
 }
 
-// getEnv возвращает значение переменной или значение по умолчанию.
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value

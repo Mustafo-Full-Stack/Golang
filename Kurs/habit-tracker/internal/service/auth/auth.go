@@ -13,7 +13,6 @@ import (
 	userrepo "habit-tracker/internal/repository/user"
 )
 
-// Service содержит бизнес-логику регистрации, входа и проверки JWT.
 type Service struct {
 	users     *userrepo.Repository
 	jwtSecret []byte
@@ -28,7 +27,6 @@ func NewService(users *userrepo.Repository, jwtSecret string, jwtTTL time.Durati
 	}
 }
 
-// Register проверяет данные, хеширует пароль и создаёт пользователя.
 func (s *Service) Register(ctx context.Context, in models.RegisterInput) (*models.User, error) {
 	if err := in.Validate(); err != nil {
 		return nil, err
@@ -50,7 +48,6 @@ func (s *Service) Register(ctx context.Context, in models.RegisterInput) (*model
 	return user, nil
 }
 
-// Login проверяет email и пароль и возвращает JWT.
 func (s *Service) Login(ctx context.Context, in models.LoginInput) (string, error) {
 	if err := in.Validate(); err != nil {
 		return "", err
@@ -70,7 +67,6 @@ func (s *Service) Login(ctx context.Context, in models.LoginInput) (string, erro
 	return s.createToken(user.ID)
 }
 
-// Authenticate проверяет JWT и возвращает id пользователя из поля sub.
 func (s *Service) Authenticate(tokenString string) (int64, error) {
 	claims := &jwt.RegisteredClaims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
@@ -90,7 +86,6 @@ func (s *Service) Authenticate(tokenString string) (int64, error) {
 	return id, nil
 }
 
-// createToken записывает id пользователя в sub и задаёт срок действия токена.
 func (s *Service) createToken(userID int64) (string, error) {
 	now := time.Now()
 	claims := jwt.RegisteredClaims{

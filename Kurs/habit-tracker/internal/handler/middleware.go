@@ -10,7 +10,6 @@ type ctxKey string
 
 const userIDKey ctxKey = "userID"
 
-// authMiddleware проверяет Bearer-токен и кладёт id пользователя в контекст.
 func (h *Handler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		header := r.Header.Get("Authorization")
@@ -36,7 +35,6 @@ func (h *Handler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// currentUserID достаёт id пользователя, проверенного middleware.
 func currentUserID(r *http.Request) int64 {
 	id, _ := r.Context().Value(userIDKey).(int64)
 	return id

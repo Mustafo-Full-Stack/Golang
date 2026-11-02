@@ -11,7 +11,6 @@ import (
 	"habit-tracker/internal/models"
 )
 
-// Repository выполняет SQL-запросы к таблице users.
 type Repository struct {
 	db *pgxpool.Pool
 }
@@ -20,7 +19,6 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
-// Create сохраняет пользователя и заполняет его ID и CreatedAt.
 func (r *Repository) Create(ctx context.Context, u *models.User) error {
 	err := r.db.QueryRow(ctx,
 		`INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3)
@@ -29,7 +27,7 @@ func (r *Repository) Create(ctx context.Context, u *models.User) error {
 	).Scan(&u.ID, &u.CreatedAt)
 
 	if err != nil {
-		// 23505 означает нарушение уникальности email.
+
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return models.ErrUserExists
@@ -39,7 +37,6 @@ func (r *Repository) Create(ctx context.Context, u *models.User) error {
 	return nil
 }
 
-// GetByEmail ищет пользователя без учёта регистра email.
 func (r *Repository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
 	var u models.User
 	err := r.db.QueryRow(ctx,

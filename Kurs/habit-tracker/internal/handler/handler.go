@@ -10,7 +10,6 @@ import (
 	"habit-tracker/internal/service/habit"
 )
 
-// Handler принимает HTTP-запросы и передаёт их в service.
 type Handler struct {
 	auth  *auth.Service
 	habit *habit.Service
@@ -20,7 +19,6 @@ func New(authService *auth.Service, habitService *habit.Service) *Handler {
 	return &Handler{auth: authService, habit: habitService}
 }
 
-// Routes описывает маршруты приложения.
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 
@@ -35,7 +33,6 @@ func (h *Handler) Routes() http.Handler {
 	return mux
 }
 
-// writeErr переводит ошибку service в HTTP-код.
 func writeErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, models.ErrInvalidInput),

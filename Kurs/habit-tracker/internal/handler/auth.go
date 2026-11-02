@@ -18,7 +18,6 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
-// signUp регистрирует пользователя и возвращает его ID.
 func (h *Handler) signUp(w http.ResponseWriter, r *http.Request) {
 	var req signUpRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -39,7 +38,6 @@ func (h *Handler) signUp(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": user.ID})
 }
 
-// login проверяет данные и возвращает JWT.
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

@@ -11,7 +11,6 @@ import (
 	"habit-tracker/internal/models"
 )
 
-// Repository выполняет SQL-запросы к таблицам habits и habit_checks.
 type Repository struct {
 	db *pgxpool.Pool
 }
@@ -20,7 +19,6 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
-// Create сохраняет привычку и заполняет её ID и CreatedAt.
 func (r *Repository) Create(ctx context.Context, h *models.Habit) error {
 	return r.db.QueryRow(ctx,
 		`INSERT INTO habits (user_id, name) VALUES ($1, $2)
@@ -29,7 +27,6 @@ func (r *Repository) Create(ctx context.Context, h *models.Habit) error {
 	).Scan(&h.ID, &h.CreatedAt)
 }
 
-// ListByUser возвращает привычки пользователя.
 func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]models.Habit, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, user_id, name, created_at FROM habits
@@ -52,7 +49,6 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]models.Hab
 	return list, rows.Err()
 }
 
-// GetByID ищет привычку по id.
 func (r *Repository) GetByID(ctx context.Context, id int64) (*models.Habit, error) {
 	var h models.Habit
 	err := r.db.QueryRow(ctx,
@@ -69,7 +65,6 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (*models.Habit, erro
 	return &h, nil
 }
 
-// CreateCheck записывает отметку и отклоняет повторную за тот же день.
 func (r *Repository) CreateCheck(ctx context.Context, habitID int64, date time.Time) error {
 	tag, err := r.db.Exec(ctx,
 		`INSERT INTO habit_checks (habit_id, date) VALUES ($1, $2)
@@ -85,7 +80,6 @@ func (r *Repository) CreateCheck(ctx context.Context, habitID int64, date time.T
 	return nil
 }
 
-// ListChecks возвращает отметки привычки по дате.
 func (r *Repository) ListChecks(ctx context.Context, habitID int64) ([]models.HabitCheck, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, habit_id, date FROM habit_checks
