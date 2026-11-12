@@ -9,7 +9,7 @@ import (
 
 const (
 	minPasswordLen    = 8
-	maxPasswordBytes  = 72
+	maxPasswordLen    = 72
 	maxHabitNameRunes = 100
 )
 
@@ -41,18 +41,23 @@ type RegisterInput struct {
 }
 
 func (in *RegisterInput) Validate() error {
+
 	in.Name = strings.TrimSpace(in.Name)
+
 	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
 
 	if in.Name == "" || in.Email == "" || in.Password == "" {
 		return ErrInvalidInput
 	}
+
 	if len(in.Password) < minPasswordLen {
 		return ErrPasswordTooShort
 	}
-	if len(in.Password) > maxPasswordBytes {
+
+	if len(in.Password) > maxPasswordLen {
 		return ErrPasswordTooLong
 	}
+
 	return nil
 }
 
@@ -63,9 +68,11 @@ type LoginInput struct {
 
 func (in *LoginInput) Validate() error {
 	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
+
 	if in.Email == "" || in.Password == "" {
 		return ErrInvalidInput
 	}
+
 	return nil
 }
 
@@ -76,20 +83,22 @@ type CreateHabitInput struct {
 
 func (in *CreateHabitInput) Validate() error {
 	in.Name = strings.TrimSpace(in.Name)
+
 	if in.Name == "" || utf8.RuneCountInString(in.Name) > maxHabitNameRunes {
 		return ErrInvalidInput
 	}
+
 	return nil
 }
 
 var (
 	ErrNotFound           = errors.New("not found")
-	ErrInvalidInput       = errors.New("required fields are missing")
-	ErrPasswordTooShort   = errors.New("password must be at least 8 characters")
-	ErrPasswordTooLong    = errors.New("password must be at most 72 bytes")
+	ErrInvalidInput       = errors.New("invalid input")
+	ErrPasswordTooShort   = errors.New("password too short")
+	ErrPasswordTooLong    = errors.New("password too long")
 	ErrInvalidCredentials = errors.New("invalid email or password")
 	ErrUserExists         = errors.New("user already exists")
 	ErrInvalidToken       = errors.New("invalid or missing token")
-	ErrForbidden          = errors.New("access denied")
+	ErrForbidden          = errors.New("forbidden")
 	ErrAlreadyChecked     = errors.New("habit already checked today")
 )

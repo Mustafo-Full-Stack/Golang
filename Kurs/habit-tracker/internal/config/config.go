@@ -17,11 +17,13 @@ type Config struct {
 
 func Load() (*Config, error) {
 	ttl, err := time.ParseDuration(getEnv("JWT_TTL", "24h"))
+
 	if err != nil {
 		return nil, fmt.Errorf("invalid JWT_TTL: %w", err)
 	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")
+
 	if jwtSecret == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required")
 	}
@@ -42,8 +44,10 @@ func Load() (*Config, error) {
 }
 
 func getEnv(key, defaultValue string) string {
+
 	if value := os.Getenv(key); value != "" {
 		return value
 	}
+
 	return defaultValue
 }

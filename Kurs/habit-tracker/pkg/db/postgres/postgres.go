@@ -19,14 +19,18 @@ type Config struct {
 }
 
 func New(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
+
 	pool, err := pgxpool.New(ctx, cfg.dsn())
+
 	if err != nil {
 		return nil, fmt.Errorf("create postgres pool: %w", err)
 	}
+
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
+
 	return pool, nil
 }
 
@@ -38,5 +42,6 @@ func (cfg Config) dsn() string {
 		Path:     cfg.Database,
 		RawQuery: url.Values{"sslmode": {cfg.SSLMode}}.Encode(),
 	}
+
 	return u.String()
 }
