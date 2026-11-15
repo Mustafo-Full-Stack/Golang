@@ -1,0 +1,313 @@
+openapi: 3.0.3
+info:
+  title: crud-api
+  version: 1.0.0
+  description: |
+    Регистрация, логин, профиль пользователя и посты.
+
+    Аутентификация через JWT: после `/auth/login` передавайте `access_token`
+    в заголовке `Authorization: Bearer <token>`. Токены нигде не хранятся,
+    поэтому logout нет — клиент просто удаляет токен у себя.
+servers:
+  - url: http://localhost:8080/api/v1
+tags:
+  - name: auth
+    description: Аутентификация
+  - name: users
+    description: Пользователи. Все ручки требуют Bearer-токен из /auth/login.
+  - name: posts
+    description: Посты. Все ручки требуют Bearer-токен из /auth/login.
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Регистрация пользователя
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Пользователь создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          description: Невалидное тело запроса, пустые поля или пароль не подходит по длине
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidBody:
+                  value: { error: invalid request body }
+                invalidInput:
+                  value: { error: 'name, email and password are required' }
+                passwordTooShort:
+                  value: { error: password must be at least 8 characters }
+                passwordTooLong:
+                  value: { error: password must be at most 72 bytes }
+        '409':
+          description: Email уже занят
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example: { error: email already exists }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Логин
+      description: |
+        Возвращает пару JWT, подписанных HS256:
+        - `access_token` — для заголовка `Authorization: Bearer <token>`, живёт `ACCESS_TOKEN_TTL` (по умолчанию 15 минут);
+        - `refresh_token` — живёт `REFRESH_TOKEN_TTL` (по умолчанию 30 дней). Вместо access не принимается.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Успешный логин
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Невалидное тело запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example: { error: invalid request body }
+        '401':
+          description: Неверный email или пароль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example: { error: invalid email or password }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /users/me:
+    get:
+      tags: [users]
+      summary: Текущий пользователь
+      description: Возвращает профиль пользователя, которому принадлежит токен.
+      operationId: getMe
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Профиль пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Пользователь не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example: { error: user not found }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /posts:
+    post:
+      tags: [posts]
+      summary: Создание поста
+      description: |
+        Автор поста — пользователь из access-токена.
+        Пробелы по краям `title` и `content` обрезаются. Заголовок уникален среди всех постов.
+      operationId: createPost
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePostRequest'
+      responses:
+        '201':
+          description: Пост создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatePostResponse'
+        '400':
+          description: Невалидное тело запроса, заголовок или текст
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidBody:
+                  value: { error: invalid request body }
+                invalidTitle:
+                  value: { error: title is required and must be at most 70 characters }
+                invalidContent:
+                  value: { error: content is required and must be at most 500 characters }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Пост с таким заголовком уже существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example: { error: post with this title already exists }
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Unauthorized:
+      description: Токен не передан, невалиден, просрочен или это refresh-токен вместо access
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            missingToken:
+              value: { error: missing bearer token }
+            invalidToken:
+              value: { error: invalid token }
+
+    InternalError:
+      description: Внутренняя ошибка сервера
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example: { error: internal server error }
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          description: Пробелы по краям обрезаются, пустое имя не принимается.
+          example: Bob
+        email:
+          type: string
+          format: email
+          description: Пробелы обрезаются, приводится к нижнему регистру.
+          example: bob@mail.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: От 8 символов и не больше 72 байт (ограничение bcrypt).
+          example: secret123
+
+    RegisterResponse:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: bob@mail.com
+        password:
+          type: string
+          format: password
+          example: secret123
+
+    LoginResponse:
+      type: object
+      required: [access_token, refresh_token]
+      properties:
+        access_token:
+          type: string
+          description: 'JWT с полями `user_id`, `type: access`, `iat`, `exp`.'
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refresh_token:
+          type: string
+          description: 'JWT с полями `user_id`, `type: refresh`, `iat`, `exp`.'
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    CreatePostRequest:
+      type: object
+      required: [title, content]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 70
+          description: От 1 до 70 символов после обрезки пробелов.
+          example: Мой первый пост
+        content:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: От 1 до 500 символов после обрезки пробелов.
+          example: Привет, мир!
+
+    CreatePostResponse:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+
+    User:
+      type: object
+      required: [id, name, email, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Bob
+        email:
+          type: string
+          format: email
+          example: bob@mail.com
+        created_at:
+          type: string
+          format: date-time
+          example: '2026-10-29T18:11:14Z'
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

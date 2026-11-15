@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Habit Tracker — Полный разбор проекта и архитектуры</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --bg-soft: #121931;
+      --card: #161f3b;
+      --card-2: #1c2749;
+      --border: #2a3764;
+      --text: #e8eefc;
+      --muted: #9aa9d1;
+      --accent: #60a5fa;
+      --accent-2: #a78bfa;
+      --green: #34d399;
+      --yellow: #fbbf24;
+      --red: #f87171;
+      --cyan: #22d3ee;
+      --code-bg: #090d1a;
+      --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(circle at top right, #182347 0%, var(--bg) 45%);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    code, pre {
+      font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    code {
+      background: rgba(96, 165, 250, 0.12);
+      border: 1px solid rgba(96, 165, 250, 0.2);
+      color: #bfdbfe;
+      padding: 0.12em 0.42em;
+      border-radius: 6px;
+      font-size: 0.88em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-size: 0.86rem;
+      line-height: 1.5;
+      color: #dbeafe;
+      margin: 10px 0 0;
+    }
+
+    .container {
+      max-width: 1260px;
+      margin: 0 auto;
+      padding: 28px 20px 64px;
+    }
+
+    header.hero {
+      background: linear-gradient(135deg, rgba(96, 165, 250, 0.14), rgba(167, 139, 250, 0.12));
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px 30px;
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+    }
+    .hero-top {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.6rem, 3vw, 2.25rem);
+      letter-spacing: -0.02em;
+    }
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      max-width: 780px;
+    }
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--bg-soft);
+    }
+    .b-green { color: var(--green); border-color: rgba(52, 211, 153, 0.35); background: rgba(52, 211, 153, 0.08); }
+    .b-yellow { color: var(--yellow); border-color: rgba(251, 191, 36, 0.35); background: rgba(251, 191, 36, 0.08); }
+    .b-red { color: var(--red); border-color: rgba(248, 113, 113, 0.35); background: rgba(248, 113, 113, 0.08); }
+    .b-blue { color: var(--accent); border-color: rgba(96, 165, 250, 0.35); background: rgba(96, 165, 250, 0.08); }
+
+    nav.toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 26px;
+      position: sticky;
+      top: 10px;
+      z-index: 20;
+      background: rgba(11, 16, 32, 0.88);
+      backdrop-filter: blur(10px);
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    nav.toc a {
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      background: var(--bg-soft);
+      border: 1px solid transparent;
+      transition: 0.15s ease;
+    }
+    nav.toc a:hover {
+      border-color: var(--accent);
+      text-decoration: none;
+      color: var(--accent);
+    }
+
+    section {
+      margin-bottom: 30px;
+    }
+    .section-title {
+      font-size: 1.35rem;
+      margin: 0 0 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 20px;
+      box-shadow: var(--shadow);
+    }
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 1.05rem;
+    }
+    .card p, .card ul {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+    .card ul {
+      padding-left: 18px;
+      margin-top: 8px;
+    }
+    .card li { margin-bottom: 5px; }
+
+    .alert {
+      border-radius: 12px;
+      padding: 15px 18px;
+      border: 1px solid;
+      margin-top: 16px;
+    }
+    .alert-warn {
+      background: rgba(251, 191, 36, 0.08);
+      border-color: rgba(251, 191, 36, 0.4);
+    }
+    .alert-danger {
+      background: rgba(248, 113, 113, 0.09);
+      border-color: rgba(248, 113, 113, 0.45);
+    }
+    .alert strong { display: block; margin-bottom: 4px; }
+
+    /* Tabs for diagrams */
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .tab-btn {
+      background: var(--bg-soft);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 9px 15px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); border-color: var(--accent); }
+    .tab-btn.active {
+      background: linear-gradient(135deg, rgba(96, 165, 250, 0.22), rgba(167, 139, 250, 0.22));
+      color: var(--text);
+      border-color: var(--accent);
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .svg-wrap {
+      background: #0a0f1e;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      overflow-x: auto;
+    }
+    svg {
+      width: 100%;
+      height: auto;
+      min-width: 760px;
+      display: block;
+    }
+    .diagram-caption {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    /* Tree & file cards */
+    .explorer-layout {
+      display: grid;
+      grid-template-columns: 330px 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+    @media (max-width: 940px) {
+      .explorer-layout { grid-template-columns: 1fr; }
+    }
+    .tree-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      position: sticky;
+      top: 70px;
+    }
+    .filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .filter-chip {
+      font-size: 0.78rem;
+      padding: 4px 9px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--bg-soft);
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .filter-chip.active {
+      color: var(--text);
+      border-color: var(--accent);
+      background: rgba(96, 165, 250, 0.16);
+    }
+    .tree-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.82rem;
+    }
+    .tree-list li {
+      margin: 3px 0;
+    }
+    .tree-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 5px 8px;
+      border-radius: 7px;
+      color: var(--text);
+      cursor: pointer;
+      transition: 0.12s;
+    }
+    .tree-item:hover {
+      background: var(--card-2);
+      text-decoration: none;
+    }
+    .tree-item.selected {
+      background: rgba(96, 165, 250, 0.18);
+      border: 1px solid rgba(96, 165, 250, 0.35);
+    }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-green { background: var(--green); }
+    .dot-yellow { background: var(--yellow); }
+    .dot-red { background: var(--red); }
+    .dot-gray { background: #64748b; }
+
+    .file-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .file-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 22px;
+      scroll-margin-top: 74px;
+    }
+    .file-card.hidden { display: none; }
+    .file-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .file-path {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 1.02rem;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+    .file-meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      font-size: 0.76rem;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--bg-soft);
+      color: var(--muted);
+    }
+    .pill.ready { color: var(--green); border-color: rgba(52, 211, 153, 0.35); }
+    .pill.partial { color: var(--yellow); border-color: rgba(251, 191, 36, 0.35); }
+    .pill.empty { color: var(--red); border-color: rgba(248, 113, 113, 0.35); }
+
+    .kv-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin: 12px 0;
+    }
+    .kv {
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .kv-label {
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .kv-val {
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.88rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      background: var(--bg-soft);
+    }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="hero">
+      <div class="hero-top">
+        <div>
+          <h1>Habit Tracker — разбор структуры и работы проекта</h1>
+          <p class="subtitle">
+            Подробный путеводитель по каждой папке и файлу Go-проекта <code>habit-tracker</code>
+            в его текущем состоянии: что уже написано, как слои связаны между собой, схемы работы и найденные нюансы.
+          </p>
+        </div>
+      </div>
+      <div class="badges">
+        <span class="badge b-blue">Go 1.26.8</span>
+        <span class="badge b-green">PostgreSQL (pgx/v5)</span>
+        <span class="badge b-blue">JWT (HS256) + bcrypt</span>
+        <span class="badge b-yellow">Статус: каркас ядра (без HTTP и main.go)</span>
+        <span class="badge b-green">go build ./... проходит</span>
+      </div>
+    </header>
+
+    <nav class="toc">
+      <a href="#status">1. Что сейчас работает</a>
+      <a href="#diagrams">2. Схемы и диаграммы</a>
+      <a href="#explorer">3. Каждая папка и файл</a>
+      <a href="#env-table">4. Конфиг и ENV</a>
+      <a href="#next-steps">5. Чего не хватает для запуска</a>
+    </nav>
+
+    <!-- SECTION 1: CURRENT STATUS -->
+    <section id="status">
+      <h2 class="section-title">1. Как проект работает НА ДАННЫЙ МОМЕНТ</h2>
+      <div class="grid-3">
+        <div class="card">
+          <h3>✅ Что уже реализовано</h3>
+          <ul>
+            <li><strong>Конфигурация:</strong> чтение ENV-переменных (<code>internal/config</code>).</li>
+            <li><strong>База данных:</strong> создание пула подключений <code>pgxpool.Pool</code> и проверка <code>Ping</code> (<code>pkg/db/postgres</code>).</li>
+            <li><strong>Схема БД:</strong> SQL-миграции для таблиц <code>users</code>, <code>habits</code>, <code>habit_checks</code>.</li>
+            <li><strong>Доменные модели:</strong> структуры, валидация входных данных и стандартные ошибки (<code>internal/models</code>).</li>
+            <li><strong>Авторизация (полный слой):</strong> регистрация (bcrypt), вход (проверка пароля + выдача JWT) и проверка токена (<code>internal/service/auth</code> + <code>internal/repository/user</code>).</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>🚧 Что сделано частично / пустое</h3>
+          <ul>
+            <li><strong>Репозиторий привычек:</strong> есть только <code>Create</code> и <code>ListByUser</code>. Нет методов для отметки выполнения привычек (<code>habit_checks</code>), удаления или получения одной привычки.</li>
+            <li><strong><code>internal/service/habit/</code>:</strong> папка создана, но внутри <strong>пока нет файлов</strong>.</li>
+            <li><strong><code>docs/</code>:</strong> была <strong>пустой папкой</strong> (до создания этого HTML-разбора).</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>⛔ Почему нельзя запустить сервер сейчас</h3>
+          <ul>
+            <li>Нет точки входа <code>cmd/.../main.go</code> (нет <code>func main()</code>).</li>
+            <li>Нет транспортного / HTTP-слоя (<code>handler</code> / <code>middleware</code> / роутера), хотя в конфиге уже заложен <code>HTTPPort</code>.</li>
+            <li>Все текущие пакеты — это <strong>библиотечные модули</strong>: <code>go build ./...</code> компилирует их без ошибок, но исполняемого бинарника ещё нет.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="alert alert-danger">
+        <strong>🐞 Найденный баг в текущем коде:</strong>
+        В файле <code>internal/repository/habit/postgres.go</code> на <strong>30-й строке</strong> в SQL-запросе функции <code>ListByUser</code> опечатка в плейсхолдере PostgreSQL: написано <code>WHERE user_id = 1$</code> вместо <code>WHERE user_id = $1</code>. Компилятор Go не проверяет SQL-строки, поэтому <code>go build</code> проходит, но при реальном вызове PostgreSQL вернёт синтаксическую ошибку.
+      </div>
+    </section>
+
+    <!-- SECTION 2: DIAGRAMS -->
+    <section id="diagrams">
+      <h2 class="section-title">2. Рисунки и схемы работы</h2>
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="arch">Архитектура слоёв (сейчас)</button>
+        <button class="tab-btn" data-tab="flows">Потоки Auth: Register / Login / Token</button>
+        <button class="tab-btn" data-tab="db">Схема базы данных (ER)</button>
+        <button class="tab-btn" data-tab="deps">Граф импортов между файлами</button>
+      </div>
+
+      <!-- TAB 1: ARCHITECTURE -->
+      <div class="tab-panel active" id="tab-arch">
+        <div class="svg-wrap">
+          <svg viewBox="0 0 980 540" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#60a5fa" />
+              </marker>
+              <marker id="arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b" />
+              </marker>
+              <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#a78bfa" />
+              </marker>
+            </defs>
+
+            <!-- Missing top layer -->
+            <rect x="40" y="20" width="900" height="84" rx="12" fill="#13192b" stroke="#64748b" stroke-width="2" stroke-dasharray="8 6" />
+            <text x="65" y="50" fill="#94a3b8" font-size="14" font-weight="700">ЕЩЁ НЕ РЕАЛИЗОВАНО: Точка входа и HTTP-слой</text>
+            <text x="65" y="75" fill="#64748b" font-size="13">cmd/api/main.go (сборка зависимостей)  •  HTTP handlers / middleware (порт из Config.HTTPPort, проверка JWT через auth.Authenticate)</text>
+
+            <!-- Arrows from missing layer down -->
+            <line x1="250" y1="104" x2="250" y2="148" stroke="#64748b" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow-muted)" />
+            <line x1="650" y1="104" x2="650" y2="148" stroke="#64748b" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow-muted)" />
+
+            <!-- Service layer -->
+            <rect x="40" y="150" width="420" height="115" rx="12" fill="#13253d" stroke="#34d399" stroke-width="2" />
+            <text x="60" y="178" fill="#34d399" font-size="13" font-weight="700">SERVICE LAYER — internal/service/auth/auth.go [ГОТОВО]</text>
+            <text x="60" y="202" fill="#e2e8f0" font-size="13">• Register(RegisterInput) → bcrypt + users.Create</text>
+            <text x="60" y="224" fill="#e2e8f0" font-size="13">• Login(LoginInput) → GetByEmail + bcrypt + JWT</text>
+            <text x="60" y="246" fill="#e2e8f0" font-size="13">• Authenticate(token) → проверка HS256 → userID</text>
+
+            <rect x="500" y="150" width="440" height="115" rx="12" fill="#211824" stroke="#f87171" stroke-width="2" stroke-dasharray="6 5" />
+            <text x="520" y="178" fill="#f87171" font-size="13" font-weight="700">SERVICE LAYER — internal/service/habit/ [ПУСТАЯ ПАПКА]</text>
+            <text x="520" y="205" fill="#cbd5e1" font-size="13">Здесь будет бизнес-логика привычек:</text>
+            <text x="520" y="228" fill="#94a3b8" font-size="13">создание привычки, список привычек пользователя,</text>
+            <text x="520" y="248" fill="#94a3b8" font-size="13">отметка выполнения (check-in) и статистика/стрики.</text>
+
+            <!-- Arrows Service -> Repository -->
+            <line x1="250" y1="265" x2="250" y2="306" stroke="#60a5fa" stroke-width="2.2" marker-end="url(#arrow)" />
+            <line x1="720" y1="265" x2="720" y2="306" stroke="#64748b" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow-muted)" />
+
+            <!-- Repository layer -->
+            <rect x="40" y="308" width="420" height="104" rx="12" fill="#16213e" stroke="#34d399" stroke-width="2" />
+            <text x="60" y="336" fill="#34d399" font-size="13" font-weight="700">REPOSITORY — internal/repository/user/postgres.go [ГОТОВО]</text>
+            <text x="60" y="362" fill="#e2e8f0" font-size="13">• Create(ctx, *models.User) — INSERT, ловит код 23505</text>
+            <text x="60" y="385" fill="#e2e8f0" font-size="13">• GetByEmail(ctx, email) — SELECT по lower(email)</text>
+
+            <rect x="500" y="308" width="440" height="104" rx="12" fill="#231f16" stroke="#fbbf24" stroke-width="2" />
+            <text x="520" y="336" fill="#fbbf24" font-size="13" font-weight="700">REPOSITORY — internal/repository/habit/postgres.go [ЧАСТИЧНО]</text>
+            <text x="520" y="362" fill="#e2e8f0" font-size="13">• Create(ctx, *models.Habit) — INSERT в habits</text>
+            <text x="520" y="385" fill="#fca5a5" font-size="13">• ListByUser(ctx, userID) — ⚠️ баг в SQL: user_id = 1$</text>
+
+            <!-- Bottom Infrastructure & Cross-cutting -->
+            <line x1="250" y1="412" x2="360" y2="452" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrow)" />
+            <line x1="720" y1="412" x2="520" y2="452" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrow)" />
+
+            <rect x="40" y="454" width="230" height="68" rx="12" fill="#181b34" stroke="#a78bfa" stroke-width="2" />
+            <text x="56" y="481" fill="#a78bfa" font-size="12.5" font-weight="700">internal/config/config.go</text>
+            <text x="56" y="503" fill="#cbd5e1" font-size="12">Читает ENV → Config + Postgres</text>
+
+            <rect x="295" y="454" width="320" height="68" rx="12" fill="#13263a" stroke="#22d3ee" stroke-width="2" />
+            <text x="312" y="481" fill="#22d3ee" font-size="12.5" font-weight="700">pkg/db/postgres/postgres.go</text>
+            <text x="312" y="503" fill="#cbd5e1" font-size="12">pgxpool.Pool + Ping() → PostgreSQL (migrations/)</text>
+
+            <rect x="640" y="454" width="300" height="68" rx="12" fill="#1b1c36" stroke="#a78bfa" stroke-width="2" />
+            <text x="658" y="481" fill="#a78bfa" font-size="12.5" font-weight="700">internal/models/models.go</text>
+            <text x="658" y="503" fill="#cbd5e1" font-size="12">Модели, Validate(), Err* (общий слой)</text>
+
+            <!-- Config -> Postgres arrow -->
+            <line x1="270" y1="488" x2="293" y2="488" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-purple)" />
+          </svg>
+        </div>
+        <p class="diagram-caption">
+          Проект построен по классической слоистой архитектуре (Clean / Layered Architecture):
+          <strong>Transport (ещё не написан) → Service → Repository → PostgreSQL</strong>, а модели и конфигурация пронизывают слои.
+        </p>
+      </div>
+
+      <!-- TAB 2: FLOWS -->
+      <div class="tab-panel" id="tab-flows">
+        <div class="svg-wrap">
+          <svg viewBox="0 0 980 560" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#34d399" />
+              </marker>
+              <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#60a5fa" />
+              </marker>
+            </defs>
+
+            <!-- Flow 1: Register -->
+            <rect x="20" y="18" width="940" height="162" rx="12" fill="#121a30" stroke="#2a3764" stroke-width="1.5" />
+            <text x="38" y="45" fill="#34d399" font-size="14" font-weight="700">ПОТОК 1: Регистрация — auth.Service.Register(ctx, RegisterInput)</text>
+
+            <rect x="38" y="64" width="165" height="92" rx="9" fill="#1b2647" stroke="#60a5fa" />
+            <text x="50" y="90" fill="#fff" font-size="12.5" font-weight="700">1. Validate()</text>
+            <text x="50" y="110" fill="#cbd5e1" font-size="11.5">TrimSpace(Name)</text>
+            <text x="50" y="126" fill="#cbd5e1" font-size="11.5">ToLower(Email)</text>
+            <text x="50" y="142" fill="#cbd5e1" font-size="11.5">Пароль: 8..72 байта</text>
+
+            <line x1="203" y1="110" x2="233" y2="110" stroke="#34d399" stroke-width="2" marker-end="url(#arr2)" />
+
+            <rect x="235" y="64" width="175" height="92" rx="9" fill="#1b2647" stroke="#60a5fa" />
+            <text x="248" y="90" fill="#fff" font-size="12.5" font-weight="700">2. bcrypt Hash</text>
+            <text x="248" y="110" fill="#cbd5e1" font-size="11.5">GenerateFromPassword</text>
+            <text x="248" y="126" fill="#cbd5e1" font-size="11.5">DefaultCost (10)</text>
+            <text x="248" y="142" fill="#94a3b8" font-size="11">Пароль не хранится</text>
+
+            <line x1="410" y1="110" x2="440" y2="110" stroke="#34d399" stroke-width="2" marker-end="url(#arr2)" />
+
+            <rect x="442" y="64" width="235" height="92" rx="9" fill="#1b2647" stroke="#60a5fa" />
+            <text x="455" y="90" fill="#fff" font-size="12.5" font-weight="700">3. userRepo.Create()</text>
+            <text x="455" y="110" fill="#cbd5e1" font-size="11.5">INSERT INTO users ...</text>
+            <text x="455" y="126" fill="#cbd5e1" font-size="11.5">RETURNING id, created_at</text>
+            <text x="455" y="142" fill="#fbbf24" font-size="11">Код 23505 → ErrUserExists</text>
+
+            <line x1="677" y1="110" x2="707" y2="110" stroke="#34d399" stroke-width="2" marker-end="url(#arr2)" />
+
+            <rect x="709" y="64" width="232" height="92" rx="9" fill="#132c29" stroke="#34d399" />
+            <text x="722" y="90" fill="#34d399" font-size="12.5" font-weight="700">4. Результат</text>
+            <text x="722" y="112" fill="#e2e8f0" font-size="11.5">Возвращает *models.User</text>
+            <text x="722" y="130" fill="#e2e8f0" font-size="11.5">с заполненным ID и</text>
+            <text x="722" y="146" fill="#e2e8f0" font-size="11.5">CreatedAt из PostgreSQL</text>
+
+            <!-- Flow 2: Login -->
+            <rect x="20" y="198" width="940" height="162" rx="12" fill="#121a30" stroke="#2a3764" stroke-width="1.5" />
+            <text x="38" y="225" fill="#60a5fa" font-size="14" font-weight="700">ПОТОК 2: Вход и выдача JWT — auth.Service.Login(ctx, LoginInput)</text>
+
+            <rect x="38" y="244" width="165" height="92" rx="9" fill="#1b2647" stroke="#60a5fa" />
+            <text x="50" y="270" fill="#fff" font-size="12.5" font-weight="700">1. Validate()</text>
+            <text x="50" y="290" fill="#cbd5e1" font-size="11.5">ToLower(Trim(Email))</text>
+            <text x="50" y="308" fill="#cbd5e1" font-size="11.5">Email и Password != ""</text>
+
+            <line x1="203" y1="290" x2="233" y2="290" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr3)" />
+
+            <rect x="235" y="244" width="195" height="92" rx="9" fill="#1b2647" stroke="#60a5fa" />
+            <text x="248" y="270" fill="#fff" font-size="12.5" font-weight="700">2. GetByEmail()</text>
+            <text x="248" y="290" fill="#cbd5e1" font-size="11.5">WHERE lower(email)</text>
+            <text x="248" y="308" fill="#fbbf24" font-size="11">ErrNotFound маскируется</text>
+            <text x="248" y="324" fill="#fbbf24" font-size="11">в ErrInvalidCredentials</text>
+
+            <line x1="430" y1="290" x2="460" y2="290" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr3)" />
+
+            <rect x="462" y="244" width="215" height="92" rx="9" fill="#1b2647" stroke="#60a5fa" />
+            <text x="475" y="270" fill="#fff" font-size="12.5" font-weight="700">3. CompareHash()</text>
+            <text x="475" y="290" fill="#cbd5e1" font-size="11.5">Сравнивает PasswordHash</text>
+            <text x="475" y="308" fill="#cbd5e1" font-size="11.5">из БД и введённый пароль</text>
+            <text x="475" y="324" fill="#fbbf24" font-size="11">Ошибка → ErrInvalidCredentials</text>
+
+            <line x1="677" y1="290" x2="707" y2="290" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr3)" />
+
+            <rect x="709" y="244" width="232" height="92" rx="9" fill="#162845" stroke="#60a5fa" />
+            <text x="722" y="270" fill="#60a5fa" font-size="12.5" font-weight="700">4. createToken(user.ID)</text>
+            <text x="722" y="290" fill="#e2e8f0" font-size="11.5">JWT HS256 (JWTSecret)</text>
+            <text x="722" y="308" fill="#e2e8f0" font-size="11.5">sub = user.ID, iat = now</text>
+            <text x="722" y="324" fill="#e2e8f0" font-size="11.5">exp = now + JWTTTL (24h)</text>
+
+            <!-- Flow 3: Authenticate -->
+            <rect x="20" y="378" width="940" height="162" rx="12" fill="#121a30" stroke="#2a3764" stroke-width="1.5" />
+            <text x="38" y="405" fill="#a78bfa" font-size="14" font-weight="700">ПОТОК 3: Проверка токена — auth.Service.Authenticate(tokenString)</text>
+
+            <rect x="38" y="424" width="265" height="92" rx="9" fill="#1b2647" stroke="#a78bfa" />
+            <text x="52" y="450" fill="#fff" font-size="12.5" font-weight="700">1. jwt.ParseWithClaims</text>
+            <text x="52" y="470" fill="#cbd5e1" font-size="11.5">Проверяет метод подписи</text>
+            <text x="52" y="488" fill="#cbd5e1" font-size="11.5">(только *jwt.SigningMethodHMAC)</text>
+            <text x="52" y="504" fill="#cbd5e1" font-size="11.5">и сверяет подпись с jwtSecret</text>
+
+            <line x1="303" y1="470" x2="338" y2="470" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr3)" />
+
+            <rect x="340" y="424" width="275" height="92" rx="9" fill="#1b2647" stroke="#a78bfa" />
+            <text x="354" y="450" fill="#fff" font-size="12.5" font-weight="700">2. Валидация claims</text>
+            <text x="354" y="470" fill="#cbd5e1" font-size="11.5">Проверяет token.Valid (в т.ч. exp)</text>
+            <text x="354" y="488" fill="#cbd5e1" font-size="11.5">Парсит claims.Subject → int64</text>
+            <text x="354" y="504" fill="#fbbf24" font-size="11">Если id &lt;= 0 → ErrInvalidToken</text>
+
+            <line x1="615" y1="470" x2="650" y2="470" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr3)" />
+
+            <rect x="652" y="424" width="289" height="92" rx="9" fill="#211b3b" stroke="#a78bfa" />
+            <text x="666" y="450" fill="#a78bfa" font-size="12.5" font-weight="700">3. Возврат userID (int64)</text>
+            <text x="666" y="470" fill="#e2e8f0" font-size="11.5">Дальше HTTP middleware сможет</text>
+            <text x="666" y="488" fill="#e2e8f0" font-size="11.5">передать этот userID в сервис</text>
+            <text x="666" y="504" fill="#e2e8f0" font-size="11.5">привычек для работы с данными.</text>
+          </svg>
+        </div>
+        <p class="diagram-caption">
+          Обрати внимание на хорошую практику безопасности в <code>Login</code>: при несуществующем email ошибка <code>ErrNotFound</code> подменяется на <code>ErrInvalidCredentials</code>, чтобы нельзя было перебором узнать, зарегистрирован ли email.
+        </p>
+      </div>
+
+      <!-- TAB 3: DB -->
+      <div class="tab-panel" id="tab-db">
+        <div class="svg-wrap">
+          <svg viewBox="0 0 980 390" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="fk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#22d3ee" />
+              </marker>
+            </defs>
+
+            <!-- users table -->
+            <rect x="35" y="40" width="270" height="240" rx="12" fill="#131c36" stroke="#60a5fa" stroke-width="2" />
+            <rect x="35" y="40" width="270" height="38" rx="12" fill="#1e3a5f" />
+            <text x="52" y="65" fill="#fff" font-size="14" font-weight="700">users (001_create_users.sql)</text>
+            <text x="52" y="102" fill="#fbbf24" font-size="12.5">🔑 id : BIGSERIAL PRIMARY KEY</text>
+            <text x="52" y="128" fill="#e2e8f0" font-size="12.5">name : TEXT NOT NULL</text>
+            <text x="52" y="154" fill="#e2e8f0" font-size="12.5">email : TEXT NOT NULL</text>
+            <text x="52" y="180" fill="#e2e8f0" font-size="12.5">password_hash : TEXT NOT NULL</text>
+            <text x="52" y="206" fill="#e2e8f0" font-size="12.5">created_at : TIMESTAMPTZ DEFAULT NOW()</text>
+            <line x1="48" y1="224" x2="292" y2="224" stroke="#2a3764" />
+            <text x="52" y="246" fill="#34d399" font-size="11.5">UNIQUE INDEX users_email_lower_uniq</text>
+            <text x="52" y="264" fill="#94a3b8" font-size="11.5">на выражении (lower(email))</text>
+
+            <!-- habits table -->
+            <rect x="365" y="40" width="265" height="215" rx="12" fill="#131c36" stroke="#22d3ee" stroke-width="2" />
+            <rect x="365" y="40" width="265" height="38" rx="12" fill="#164e63" />
+            <text x="382" y="65" fill="#fff" font-size="14" font-weight="700">habits (002_create_habits.sql)</text>
+            <text x="382" y="102" fill="#fbbf24" font-size="12.5">🔑 id : BIGSERIAL PRIMARY KEY</text>
+            <text x="382" y="128" fill="#22d3ee" font-size="12.5">🔗 user_id : BIGINT NOT NULL</text>
+            <text x="382" y="154" fill="#e2e8f0" font-size="12.5">name : TEXT NOT NULL</text>
+            <text x="382" y="180" fill="#e2e8f0" font-size="12.5">created_at : TIMESTAMPTZ DEFAULT now()</text>
+            <line x1="378" y1="198" x2="617" y2="198" stroke="#2a3764" />
+            <text x="382" y="220" fill="#94a3b8" font-size="11.5">FK user_id → users(id)</text>
+            <text x="382" y="238" fill="#34d399" font-size="11.5">ON DELETE CASCADE</text>
+
+            <!-- habit_checks table -->
+            <rect x="690" y="40" width="260" height="215" rx="12" fill="#131c36" stroke="#a78bfa" stroke-width="2" />
+            <rect x="690" y="40" width="260" height="38" rx="12" fill="#3b2667" />
+            <text x="705" y="65" fill="#fff" font-size="14" font-weight="700">habit_checks (002_...sql)</text>
+            <text x="705" y="102" fill="#fbbf24" font-size="12.5">🔑 id : BIGSERIAL PRIMARY KEY</text>
+            <text x="705" y="128" fill="#a78bfa" font-size="12.5">🔗 habit_id : BIGINT NOT NULL</text>
+            <text x="705" y="154" fill="#e2e8f0" font-size="12.5">date : DATE NOT NULL</text>
+            <line x1="703" y1="176" x2="937" y2="176" stroke="#2a3764" />
+            <text x="705" y="198" fill="#94a3b8" font-size="11.5">FK habit_id → habits(id) CASCADE</text>
+            <text x="705" y="218" fill="#34d399" font-size="11.5">UNIQUE (habit_id, date)</text>
+            <text x="705" y="236" fill="#cbd5e1" font-size="11">1 отметка на привычку в день</text>
+
+            <!-- FK lines -->
+            <path d="M 365 124 L 335 124 L 335 98 L 308 98" fill="none" stroke="#22d3ee" stroke-width="2.2" marker-end="url(#fk)" />
+            <text x="312" y="88" fill="#22d3ee" font-size="11">1 : N</text>
+
+            <path d="M 690 124 L 660 124 L 660 98 L 633 98" fill="none" stroke="#22d3ee" stroke-width="2.2" marker-end="url(#fk)" />
+            <text x="638" y="88" fill="#22d3ee" font-size="11">1 : N</text>
+
+            <!-- Legend / note -->
+            <rect x="35" y="305" width="915" height="62" rx="10" fill="#10182e" stroke="#2a3764" />
+            <text x="52" y="331" fill="#e2e8f0" font-size="12.5">💡 <tspan font-weight="700">Как связаны таблицы:</tspan> удаление пользователя каскадно удалит все его привычки и их отметки (ON DELETE CASCADE).</text>
+            <text x="52" y="352" fill="#94a3b8" font-size="12">Таблица habit_checks уже создана в SQL и отражена в models.HabitCheck / ErrAlreadyChecked, но в Go-коде репозитория пока не используется.</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- TAB 4: IMPORTS -->
+      <div class="tab-panel" id="tab-deps">
+        <div class="svg-wrap">
+          <svg viewBox="0 0 980 380" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="imp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#60a5fa" />
+              </marker>
+            </defs>
+
+            <!-- Nodes -->
+            <rect x="40" y="35" width="230" height="66" rx="10" fill="#172544" stroke="#60a5fa" stroke-width="2" />
+            <text x="58" y="64" fill="#fff" font-size="13" font-weight="700">internal/config</text>
+            <text x="58" y="84" fill="#94a3b8" font-size="11.5">config.go</text>
+
+            <rect x="40" y="160" width="230" height="66" rx="10" fill="#132b3b" stroke="#22d3ee" stroke-width="2" />
+            <text x="58" y="189" fill="#fff" font-size="13" font-weight="700">pkg/db/postgres</text>
+            <text x="58" y="209" fill="#94a3b8" font-size="11.5">postgres.go (pgxpool)</text>
+
+            <rect x="370" y="35" width="245" height="66" rx="10" fill="#172544" stroke="#34d399" stroke-width="2" />
+            <text x="388" y="64" fill="#fff" font-size="13" font-weight="700">internal/service/auth</text>
+            <text x="388" y="84" fill="#94a3b8" font-size="11.5">auth.go (jwt/v5, bcrypt)</text>
+
+            <rect x="370" y="160" width="245" height="66" rx="10" fill="#172544" stroke="#34d399" stroke-width="2" />
+            <text x="388" y="189" fill="#fff" font-size="13" font-weight="700">internal/repository/user</text>
+            <text x="388" y="209" fill="#94a3b8" font-size="11.5">postgres.go (pgx/v5)</text>
+
+            <rect x="690" y="160" width="250" height="66" rx="10" fill="#231f16" stroke="#fbbf24" stroke-width="2" />
+            <text x="708" y="189" fill="#fff" font-size="13" font-weight="700">internal/repository/habit</text>
+            <text x="708" y="209" fill="#94a3b8" font-size="11.5">postgres.go (pgx/v5)</text>
+
+            <rect x="525" y="285" width="260" height="66" rx="10" fill="#211b3b" stroke="#a78bfa" stroke-width="2" />
+            <text x="545" y="314" fill="#fff" font-size="13" font-weight="700">internal/models</text>
+            <text x="545" y="334" fill="#94a3b8" font-size="11.5">models.go (никого из проекта не импортирует)</text>
+
+            <!-- Import arrows (who imports whom) -->
+            <line x1="155" y1="101" x2="155" y2="157" stroke="#60a5fa" stroke-width="2" marker-end="url(#imp)" />
+            <text x="163" y="134" fill="#93c5fd" font-size="11">imports</text>
+
+            <line x1="492" y1="101" x2="492" y2="157" stroke="#60a5fa" stroke-width="2" marker-end="url(#imp)" />
+            <text x="500" y="134" fill="#93c5fd" font-size="11">imports</text>
+
+            <path d="M 615 68 L 655 68 L 655 282" fill="none" stroke="#60a5fa" stroke-width="2" marker-end="url(#imp)" />
+            <line x1="510" y1="226" x2="575" y2="283" stroke="#60a5fa" stroke-width="2" marker-end="url(#imp)" />
+            <line x1="800" y1="226" x2="730" y2="283" stroke="#60a5fa" stroke-width="2" marker-end="url(#imp)" />
+          </svg>
+        </div>
+        <p class="diagram-caption">
+          Стрелка означает «импортирует» (<code>import "..."</code>). Циклических зависимостей нет: <code>internal/models</code> находится в основании графа и не зависит ни от БД, ни от сервисов.
+        </p>
+      </div>
+    </section>
+
+    <!-- SECTION 3: EVERY FOLDER & FILE -->
+    <section id="explorer">
+      <h2 class="section-title">3. Разбор каждой папки и файла</h2>
+      <div class="explorer-layout">
+        <aside class="tree-box">
+          <div class="filter-row">
+            <button class="filter-chip active" data-filter="all">Все</button>
+            <button class="filter-chip" data-filter="ready">Готово</button>
+            <button class="filter-chip" data-filter="partial">Частично</button>
+            <button class="filter-chip" data-filter="empty">Пустые</button>
+          </div>
+          <ul class="tree-list" id="treeList">
+            <li><a class="tree-item" href="#f-root"><span>📁 habit-tracker/</span><span class="dot dot-gray"></span></a></li>
+            <li><a class="tree-item" href="#f-gomod"><span>&nbsp;&nbsp;📄 go.mod</span><span class="dot dot-green"></span></a></li>
+            <li><a class="tree-item" href="#f-gosum"><span>&nbsp;&nbsp;📄 go.sum</span><span class="dot dot-green"></span></a></li>
+            <li><a class="tree-item" href="#f-docs"><span>&nbsp;&nbsp;📁 docs/</span><span class="dot dot-red"></span></a></li>
+            <li><a class="tree-item" href="#f-migrations"><span>&nbsp;&nbsp;📁 migrations/</span><span class="dot dot-green"></span></a></li>
+            <li><a class="tree-item" href="#f-mig1"><span>&nbsp;&nbsp;&nbsp;&nbsp;📄 001_create_users.sql</span><span class="dot dot-green"></span></a></li>
+            <li><a class="tree-item" href="#f-mig2"><span>&nbsp;&nbsp;&nbsp;&nbsp;📄 002_create_habits.sql</span><span class="dot dot-green"></span></a></li>
+            <li><a class="tree-item" href="#f-pkg"><span>&nbsp;&nbsp;📁 pkg/db/postgres/</span><span class="dot dot-green"></span></a></li>
+            <li><a class="tree-item" href="#f-postgres-pkg"><span>&nbsp;&nbsp;&nbsp;&nbsp;📄 postgres.go</span><span class="dot dot-green"></span></a></li>
+            <li><a class="tree-item" href="#f-internal"><span>&nbsp;&nbsp;📁 internal/</span><span class="dot dot-gray"></span></a></li>
+            <li><a class="tree-item" href="#f-config"><span>&nbsp;&nbsp;&nbsp;&nbsp;📄 config/config.go</span><span class="dot dot-green"></span></a></li>
+            <li><a class="tree-item" href="#f-models"><span>&nbsp;&nbsp;&nbsp;&nbsp;📄 models/models.go</span><span class="dot dot-green"></span></a></li>
+            <li><a class="tree-item" href="#f-repo-user"><span>&nbsp;&nbsp;&nbsp;&nbsp;📄 repository/user/postgres.go</span><span class="dot dot-green"></span></a></li>
+            <li><a class="tree-item" href="#f-repo-habit"><span>&nbsp;&nbsp;&nbsp;&nbsp;📄 repository/habit/postgres.go</span><span class="dot dot-yellow"></span></a></li>
+            <li><a class="tree-item" href="#f-svc-auth"><span>&nbsp;&nbsp;&nbsp;&nbsp;📄 service/auth/auth.go</span><span class="dot dot-green"></span></a></li>
+            <li><a class="tree-item" href="#f-svc-habit"><span>&nbsp;&nbsp;&nbsp;&nbsp;📁 service/habit/</span><span class="dot dot-red"></span></a></li>
+          </ul>
+        </aside>
+
+        <div class="file-cards">
+          <!-- ROOT -->
+          <article class="file-card" id="f-root" data-status="ready">
+            <div class="file-header">
+              <span class="file-path">📁 habit-tracker/ (Корень проекта)</span>
+              <div class="file-meta"><span class="pill">Корень Go-модуля</span></div>
+            </div>
+            <p>
+              Главная директория проекта. Сейчас здесь лежат файлы описания зависимостей (<code>go.mod</code>, <code>go.sum</code>)
+              и четыре базовые папки: <code>docs</code>, <code>migrations</code>, <code>pkg</code>, <code>internal</code>.
+              Пока отсутствует папка <code>cmd/</code> с файлом <code>main.go</code> и слой HTTP-обработчиков.
+            </p>
+          </article>
+
+          <!-- go.mod -->
+          <article class="file-card" id="f-gomod" data-status="ready">
+            <div class="file-header">
+              <span class="file-path">📄 go.mod</span>
+              <div class="file-meta"><span class="pill ready">Готово</span></div>
+            </div>
+            <p>Описывает имя Go-модуля (<code>habit-tracker</code>), версию языка (<code>go 1.26.8</code>) и внешние библиотеки.</p>
+            <div class="kv-grid">
+              <div class="kv">
+                <div class="kv-label">github.com/golang-jwt/jwt/v5 (v5.3.1)</div>
+                <div class="kv-val">Создание и проверка JWT-токенов авторизации.</div>
+              </div>
+              <div class="kv">
+                <div class="kv-label">github.com/jackc/pgx/v5 (v5.12.0)</div>
+                <div class="kv-val">Быстрый драйвер PostgreSQL и пул соединений <code>pgxpool</code>.</div>
+              </div>
+              <div class="kv">
+                <div class="kv-label">golang.org/x/crypto</div>
+                <div class="kv-val">Используется пакет <code>bcrypt</code> для безопасного хеширования паролей.</div>
+              </div>
+            </div>
+          </article>
+
+          <!-- go.sum -->
+          <article class="file-card" id="f-gosum" data-status="ready">
+            <div class="file-header">
+              <span class="file-path">📄 go.sum</span>
+              <div class="file-meta"><span class="pill ready">Готово • 30 строк</span></div>
+            </div>
+            <p>
+              Автоматически генерируемый файл с криптографическими контрольными суммами всех прямых и транзитивных зависимостей из <code>go.mod</code> (например, <code>pgpassfile</code>, <code>puddle/v2</code>, <code>x/sync</code>, <code>x/text</code>). Гарантирует, что код соберётся с теми же самыми версиями библиотек.
+            </p>
+          </article>
+
+          <!-- docs -->
+          <article class="file-card" id="f-docs" data-status="empty">
+            <div class="file-header">
+              <span class="file-path">📁 docs/</span>
+              <div class="file-meta"><span class="pill empty">Была пустая папка</span></div>
+            </div>
+            <p>
+              Директория для проектной документации (обычно сюда кладут Swagger/OpenAPI-спецификацию, схемы API, README-заметки).
+              На момент проверки папка была полностью пустой — этот HTML-файл сохранён сюда же как обзор текущей архитектуры.
+            </p>
+          </article>
+
+          <!-- migrations -->
+          <article class="file-card" id="f-migrations" data-status="ready">
+            <div class="file-header">
+              <span class="file-path">📁 migrations/</span>
+              <div class="file-meta"><span class="pill ready">Готово • 2 файла</span></div>
+            </div>
+            <p>
+              Папка с SQL-скриптами создания таблиц в PostgreSQL. Миграции пронумерованы (<code>001_</code>, <code>002_</code>), чтобы накатываться строго по порядку. На текущий момент это «up»-скрипты (создание таблиц), без откатов (<code>down</code>) и без встроенного раннера миграций в Go-коде.
+            </p>
+          </article>
+
+          <!-- 001_create_users.sql -->
+          <article class="file-card" id="f-mig1" data-status="ready">
+            <div class="file-header">
+              <span class="file-path">📄 migrations/001_create_users.sql</span>
+              <div class="file-meta"><span class="pill ready">SQL • Пользователи</span></div>
+            </div>
+            <p>Создаёт таблицу <code>users</code> и регистронезависимый уникальный индекс для email:</p>
+            <pre>CREATE TABLE IF NOT EXISTS users (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_uniq ON users (lower(email));</pre>
+            <p style="margin-top:10px; color:var(--muted);">
+              За счёт <code>users_email_lower_uniq</code> база данных сама не позволит зарегистрировать <code>Test@mail.com</code> и <code>test@mail.com</code> как двух разных пользователей.
+            </p>
+          </article>
+
+          <!-- 002_create_habits.sql -->
+          <article class="file-card" id="f-mig2" data-status="ready">
+            <div class="file-header">
+              <span class="file-path">📄 migrations/002_create_habits.sql</span>
+              <div class="file-meta"><span class="pill ready">SQL • Привычки и отметки</span></div>
+            </div>
+            <p>Создаёт две связанные таблицы:</p>
+            <ul>
+              <li><code>habits</code> — список привычек пользователя (<code>id</code>, <code>user_id</code>, <code>name</code>, <code>created_at</code>). Внешний ключ <code>user_id → users(id) ON DELETE CASCADE</code>.</li>
+              <li><code>habit_checks</code> — журнал выполнения привычки по дням (<code>id</code>, <code>habit_id</code>, <code>date</code> типа <code>DATE</code>). Ограничение <code>UNIQUE (habit_id, date)</code> запрещает отметить одну привычку дважды за один день.</li>
+            </ul>
+          </article>
+
+          <!-- pkg/db/postgres -->
+          <article class="file-card" id="f-pkg" data-status="ready">
+            <div class="file-header">
+              <span class="file-path">📁 pkg/ → pkg/db/ → pkg/db/postgres/</span>
+              <div class="file-meta"><span class="pill ready">Общий переиспользуемый пакет</span></div>
+            </div>
+            <p>
+              По соглашению Go-проектов папка <code>pkg/</code> хранит код, который не привязан к бизнес-логике конкретного приложения и может быть переиспользован в других проектах. Внутри вложены подпапки <code>db/postgres/</code> для подключения к PostgreSQL.
+            </p>
+          </article>
+
+          <!-- pkg/db/postgres/postgres.go -->
+          <article class="file-card" id="f-postgres-pkg" data-status="ready">
+            <div class="file-header">
+              <span class="file-path">📄 pkg/db/postgres/postgres.go</span>
+              <div class="file-meta"><span class="pill ready">Готово • 47 строк</span></div>
+            </div>
+            <p>Отвечает за создание и проверку пула соединений к PostgreSQL через <code>pgxpool</code>:</p>
+            <ul>
+              <li><code>type Config struct</code> — хранит <code>Host</code>, <code>Port</code>, <code>User</code>, <code>Password</code>, <code>Database</code>, <code>SSLMode</code>.</li>
+              <li><code>New(ctx context.Context, cfg Config) (*pgxpool.Pool, error)</code> — формирует строку подключения, открывает пул <code>pgxpool.New</code> и сразу проверяет реальную доступность БД через <code>pool.Ping(ctx)</code>. Если пинг не прошёл — закрывает пул и возвращает ошибку.</li>
+              <li><code>(cfg Config) dsn() string</code> — безопасно собирает URL вида <code>postgres://user:pass@host:port/db?sslmode=...</code> через стандартные <code>net/url</code> и <code>net.JoinHostPort</code> (корректно экранирует спецсимволы в пароле и работает с IPv6).</li>
+            </ul>
+          </article>
+
+          <!-- internal/ -->
+          <article class="file-card" id="f-internal" data-status="ready">
+            <div class="file-header">
+              <span class="file-path">📁 internal/</span>
+              <div class="file-meta"><span class="pill">Закрытый код приложения</span></div>
+            </div>
+            <p>
+              Специальная папка в Go: компилятор запрещает импортировать пакеты из <code>internal/</code> внешним проектам. Здесь живёт вся логика именно нашего трекера привычек: <code>config</code>, <code>models</code>, <code>repository</code>, <code>service</code>.
+            </p>
+          </article>
+
+          <!-- internal/config/config.go -->
+          <article class="file-card" id="f-config" data-status="ready">
+            <div class="file-header">
+              <span class="file-path">📄 internal/config/config.go</span>
+              <div class="file-meta"><span class="pill ready">Готово • 53 строки</span></div>
+            </div>
+            <p>
+              Загружает настройки приложения из переменных окружения (ENV) в структуру <code>Config</code>:
+            </p>
+            <ul>
+              <li><code>Load() (*Config, error)</code> — парсит длительность токена <code>JWT_TTL</code> через <code>time.ParseDuration</code>, проверяет обязательность <code>JWT_SECRET</code> (без него вернёт ошибку), заполняет <code>HTTPPort</code> и вложенный <code>postgres.Config</code>.</li>
+              <li><code>getEnv(key, defaultValue string)</code> — берёт значение из <code>os.Getenv</code> или возвращает значение по умолчанию, если переменная пустая.</li>
+            </ul>
+          </article>
+
+          <!-- internal/models/models.go -->
+          <article class="file-card" id="f-models" data-status="ready">
+            <div class="file-header">
+              <span class="file-path">📄 internal/models/models.go</span>
+              <div class="file-meta"><span class="pill ready">Готово • 104 строки</span></div>
+            </div>
+            <p>Центральный доменный файл проекта: сущности БД, входные DTO с валидацией и список типизированных ошибок.</p>
+            <div class="kv-grid">
+              <div class="kv">
+                <div class="kv-label">Сущности</div>
+                <div class="kv-val">
+                  <code>User</code> (ID, Name, Email, PasswordHash, CreatedAt)<br>
+                  <code>Habit</code> (ID, UserID, Name, CreatedAt)<br>
+                  <code>HabitCheck</code> (ID, HabitID, Date)
+                </div>
+              </div>
+              <div class="kv">
+                <div class="kv-label">Входные модели + Validate()</div>
+                <div class="kv-val">
+                  <code>RegisterInput</code>: trim Name, lower+trim Email, пароль 8..72 байта (72 — лимит bcrypt).<br>
+                  <code>LoginInput</code>: lower+trim Email, оба поля не пустые.<br>
+                  <code>CreateHabitInput</code>: trim Name, от 1 до 100 рун (символов UTF-8).
+                </div>
+              </div>
+            </div>
+            <p style="margin-top:8px;">
+              <strong>Ошибки (sentinel errors):</strong> <code>ErrNotFound</code>, <code>ErrInvalidInput</code>, <code>ErrPasswordTooShort</code>, <code>ErrPasswordTooLong</code>, <code>ErrInvalidCredentials</code>, <code>ErrUserExists</code>, <code>ErrInvalidToken</code>, <code>ErrForbidden</code>, <code>ErrAlreadyChecked</code>.
+              Наличие <code>ErrForbidden</code> и <code>ErrAlreadyChecked</code> уже заложено на будущее (для сервиса привычек и проверок прав доступа).
+            </p>
+          </article>
+
+          <!-- internal/repository/user/postgres.go -->
+          <article class="file-card" id="f-repo-user" data-status="ready">
+            <div class="file-header">
+              <span class="file-path">📄 internal/repository/user/postgres.go</span>
+              <div class="file-meta"><span class="pill ready">Готово • 58 строк</span></div>
+            </div>
+            <p>Работает с таблицей <code>users</code> в PostgreSQL через <code>*pgxpool.Pool</code>:</p>
+            <ul>
+              <li><code>NewRepository(db *pgxpool.Pool) *Repository</code> — конструктор репозитория.</li>
+              <li><code>Create(ctx, u *models.User) error</code> — вставляет пользователя (<code>INSERT INTO users ... RETURNING id, created_at</code>) и записывает сгенерированные <code>ID</code> и <code>CreatedAt</code> прямо в переданную структуру <code>u</code>. Если PostgreSQL возвращает код ошибки <code>23505</code> (нарушение уникального индекса по email), преобразует её в доменную <code>models.ErrUserExists</code>.</li>
+              <li><code>GetByEmail(ctx, email string) (*models.User, error)</code> — ищет пользователя по <code>lower(email) = lower($1)</code>. Если строк нет (<code>pgx.ErrNoRows</code>), возвращает <code>models.ErrNotFound</code>.</li>
+            </ul>
+          </article>
+
+          <!-- internal/repository/habit/postgres.go -->
+          <article class="file-card" id="f-repo-habit" data-status="partial">
+            <div class="file-header">
+              <span class="file-path">📄 internal/repository/habit/postgres.go</span>
+              <div class="file-meta"><span class="pill partial">Частично + есть баг</span></div>
+            </div>
+            <p>Начальная реализация работы с таблицей <code>habits</code>:</p>
+            <ul>
+              <li><code>NewRepository(db *pgxpool.Pool) *Repository</code> — конструктор.</li>
+              <li><code>Create(ctx, h *models.Habit) error</code> — сохраняет привычку в <code>habits</code> и заполняет <code>h.ID</code> и <code>h.CreatedAt</code>.</li>
+              <li><code>ListByUser(ctx, userID int64) ([]models.Habit, error)</code> — выбирает все привычки пользователя, отсортированные по <code>id</code>.</li>
+            </ul>
+            <div class="alert alert-danger">
+              <strong>⚠️ Ошибка в строке 30:</strong>
+              Написано <code>WHERE user_id = 1$ ORDER BY id</code> вместо <code>WHERE user_id = $1 ORDER BY id</code>. Перед запуском нужно обязательно исправить <code>1$</code> на <code>$1</code>. Также в этом файле пока нет методов для <code>habit_checks</code>, удаления или получения привычки по ID.
+            </div>
+          </article>
+
+          <!-- internal/service/auth/auth.go -->
+          <article class="file-card" id="f-svc-auth" data-status="ready">
+            <div class="file-header">
+              <span class="file-path">📄 internal/service/auth/auth.go</span>
+              <div class="file-meta"><span class="pill ready">Готово • 113 строк</span></div>
+            </div>
+            <p>Самый законченный бизнес-модуль на данный момент. Отвечает за регистрацию, логин и проверку JWT:</p>
+            <ul>
+              <li><code>NewService(users *userrepo.Repository, jwtSecret string, jwtTTL time.Duration) *Service</code> — принимает репозиторий пользователей и параметры JWT.</li>
+              <li><code>Register(ctx, in models.RegisterInput)</code> — валидирует ввод, хеширует пароль через <code>bcrypt.GenerateFromPassword</code> (<code>DefaultCost</code>), создаёт пользователя через <code>users.Create</code>.</li>
+              <li><code>Login(ctx, in models.LoginInput)</code> — валидирует ввод, ищет пользователя по email, сравнивает хеш пароля <code>bcrypt.CompareHashAndPassword</code>, при любой ошибке авторизации возвращает единую <code>models.ErrInvalidCredentials</code>, иначе выпускает JWT-токен.</li>
+              <li><code>Authenticate(tokenString string) (int64, error)</code> — парсит токен, строго проверяет алгоритм (только HMAC, защита от атак с подменой алгоритма), проверяет валидность и срок действия, достаёт числовой <code>userID</code> из <code>claims.Subject</code>.</li>
+              <li><code>createToken(userID int64)</code> (приватный метод) — создаёт <code>jwt.RegisteredClaims</code> с полями <code>Subject</code> (ID пользователя), <code>IssuedAt</code>, <code>ExpiresAt</code> и подписывает алгоритмом <code>HS256</code>.</li>
+            </ul>
+          </article>
+
+          <!-- internal/service/habit/ -->
+          <article class="file-card" id="f-svc-habit" data-status="empty">
+            <div class="file-header">
+              <span class="file-path">📁 internal/service/habit/</span>
+              <div class="file-meta"><span class="pill empty">Пустая папка</span></div>
+            </div>
+            <p>
+              Зарезервирована под бизнес-логику привычек (аналогично <code>internal/service/auth/</code>).
+              Именно здесь в будущем будет валидироваться <code>CreateHabitInput</code>, проверяться принадлежность привычки пользователю (<code>ErrForbidden</code>), создаваться отметки на сегодня (<code>ErrAlreadyChecked</code>) и т.д.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 4: ENV TABLE -->
+    <section id="env-table">
+      <h2 class="section-title">4. Переменные окружения (из <code>internal/config/config.go</code>)</h2>
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Переменная</th>
+              <th>По умолчанию</th>
+              <th>Обязательна?</th>
+              <th>Назначение</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>JWT_SECRET</code></td>
+              <td>—</td>
+              <td><strong style="color:var(--red)">Да</strong></td>
+              <td>Секретный ключ для подписи и проверки JWT-токенов (HS256). Без него <code>config.Load()</code> вернёт ошибку.</td>
+            </tr>
+            <tr>
+              <td><code>JWT_TTL</code></td>
+              <td><code>24h</code></td>
+              <td>Нет</td>
+              <td>Время жизни токена в формате Go Duration (например, <code>24h</code>, <code>30m</code>).</td>
+            </tr>
+            <tr>
+              <td><code>HTTP_PORT</code></td>
+              <td><code>8080</code></td>
+              <td>Нет</td>
+              <td>Порт будущего HTTP-сервера.</td>
+            </tr>
+            <tr>
+              <td><code>POSTGRES_HOST</code></td>
+              <td><code>localhost</code></td>
+              <td>Нет</td>
+              <td>Адрес сервера PostgreSQL.</td>
+            </tr>
+            <tr>
+              <td><code>POSTGRES_PORT</code></td>
+              <td><code>5432</code></td>
+              <td>Нет</td>
+              <td>Порт PostgreSQL.</td>
+            </tr>
+            <tr>
+              <td><code>POSTGRES_USER</code></td>
+              <td><code>postgres</code></td>
+              <td>Нет</td>
+              <td>Имя пользователя БД.</td>
+            </tr>
+            <tr>
+              <td><code>POSTGRES_PASSWORD</code></td>
+              <td><code>""</code> (пусто)</td>
+              <td>Нет</td>
+              <td>Пароль пользователя БД.</td>
+            </tr>
+            <tr>
+              <td><code>POSTGRES_DB</code></td>
+              <td><code>habits</code></td>
+              <td>Нет</td>
+              <td>Имя базы данных.</td>
+            </tr>
+            <tr>
+              <td><code>POSTGRES_SSLMODE</code></td>
+              <td><code>disable</code></td>
+              <td>Нет</td>
+              <td>Режим SSL для подключения к PostgreSQL (<code>disable</code>, <code>require</code> и т.д.).</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SECTION 5: NEXT STEPS -->
+    <section id="next-steps">
+      <h2 class="section-title">5. Что логично делать дальше, чтобы проект ожил</h2>
+      <div class="grid-3">
+        <div class="card">
+          <h3>Шаг 1. Починить и дописать Repository</h3>
+          <p>Исправить <code>1$</code> → <code>$1</code> в <code>internal/repository/habit/postgres.go</code> и добавить методы для <code>habit_checks</code> (отметить выполнение, история/проверка за дату, удаление привычки).</p>
+        </div>
+        <div class="card">
+          <h3>Шаг 2. Реализовать <code>service/habit</code></h3>
+          <p>Написать сервис, который принимает <code>CreateHabitInput</code>, вызывает <code>Validate()</code>, проверяет владельца привычки (возвращая <code>ErrForbidden</code> чужим) и работает с отметками.</p>
+        </div>
+        <div class="card">
+          <h3>Шаг 3. Добавить HTTP-слой и <code>main.go</code></h3>
+          <p>Сделать роутер и хендлеры (регистрация, логин, CRUD привычек, auth-middleware через <code>auth.Service.Authenticate</code>) и точку входа <code>cmd/api/main.go</code>, которая свяжет <code>config</code> → <code>postgres</code> → <code>repos</code> → <code>services</code> → <code>HTTP server</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Сгенерировано на основе фактического состояния файлов проекта <code>habit-tracker</code> • docs/project-overview.html
+    </footer>
+  </div>
+
+  <script>
+    // Diagram tabs
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + target).classList.add('active');
+      });
+    });
+
+    // Tree selection highlight
+    document.querySelectorAll('.tree-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.tree-item').forEach(el => el.classList.remove('selected'));
+        item.classList.add('selected');
+      });
+    });
+
+    // Status filter for file cards
+    document.querySelectorAll('.filter-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const filter = chip.dataset.filter;
+        document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+
+        document.querySelectorAll('.file-card').forEach(card => {
+          if (filter === 'all' || card.dataset.status === filter) {
+            card.classList.remove('hidden');
+          } else {
+            card.classList.add('hidden');
+          }
+        });
+      });
+    });
+  </script>
+</body>
+</html>

@@ -30,7 +30,7 @@ func (r *Repository) Create(ctx context.Context, h *models.Habit) error {
 func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]models.Habit, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, user_id, name, created_at FROM habits
-			 WHERE user_id = 1$ ORDER BY id`,
+			 WHERE user_id = $1 ORDER BY id`,
 		userID,
 	)
 

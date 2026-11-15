@@ -48,6 +48,14 @@ func (s *Service) Check(ctx context.Context, userID, habitID int64) error {
 	return s.habits.CreateCheck(ctx, habitID, today)
 }
 
+func (s *Service) Checks(ctx context.Context, userID, habitID int64) ([]models.HabitCheck, error) {
+	if err := s.checkOwner(ctx, userID, habitID); err != nil {
+		return nil, err
+	}
+
+	return s.habits.ListChecks(ctx, habitID)
+}
+
 func (s *Service) checkOwner(ctx context.Context, userID, habitID int64) error {
 	habit, err := s.habits.GetByID(ctx, habitID)
 
