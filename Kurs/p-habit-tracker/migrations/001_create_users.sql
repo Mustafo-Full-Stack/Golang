@@ -72,3 +72,4 @@ CREATE TABLE IF NOT EXISTS users (
 --   - `ON users`              — для таблицы `users`;
 --   - `(lower(email));`       — по колонке `email`, приведённой к маленьким буквам.
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_uniq ON users (lower(email));
+    
