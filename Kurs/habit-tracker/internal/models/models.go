@@ -34,6 +34,11 @@ type HabitCheck struct {
 	Date    time.Time
 }
 
+type TokenPair struct {
+	AccessToken  string
+	RefreshToken string
+}
+
 type RegisterInput struct {
 	Name     string
 	Email    string

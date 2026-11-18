@@ -70,8 +70,9 @@
 //     - Шаг 1 (`Decode(&req)`): Официант читает бланк заказа от гостя. Если бланк залит кофе и ничего
 //       не прочитать (`err != nil`) — официант даже не идёт на кухню, а сразу говорит гостю: `400 Bad Request`!
 //     - Шаг 2 (`h.auth.Register` / `h.auth.Login`): Официант относит проверенный бланк управляющему (`h.auth`).
-//       Управляющий проверяет гостя по базе и штампует клубную карту (`token`).
-//     - Шаг 3 (`writeJSON`): Официант выносит гостю на подносе готовую клубную карту `{"token": "eyJ..."}` со статусом `200 OK`!
+//       Управляющий проверяет гостя по базе и штампует пару клубных карт (`tokens`: `AccessToken` и `RefreshToken`).
+//     - Шаг 3 (`writeJSON`): Официант выносит гостю на подносе структуру `loginResponse` в формате JSON:
+//       `{"access_token": "eyJ...", "refresh_token": "eyJ..."}` со статусом `200 OK`!
 // ============================================================================
 
 // package handler — часть пакета `handler`.
@@ -155,6 +156,36 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+// loginResponse — описывает JSON, который мы отправляем клиенту при успешном входе (`POST /login`):
+//
+//	{
+//	    "access_token": "eyJhbGciOiJIUzI1NiIs...",
+//	    "refresh_token": "eyJhbGciOiJIUzI1NiIs..."
+//	}
+//
+// Поля `AccessToken` и `RefreshToken` с Большой буквы, чтобы пакет `encoding/json` смог прочитать их
+// и превратить в ключи `"access_token"` и `"refresh_token"` по тегам `json:"..."`.
+//
+// Разбор строки по каждому слову:
+//   - `type`          — объявляем новый тип данных;
+//   - `loginResponse` — имя структуры ответа (с маленькой буквы = приватная внутри пакета `handler`);
+//   - `struct`        — это структура;
+//   - `{`             — открываем список полей.
+type loginResponse struct {
+	// AccessToken — короткоживущий токен для заголовка `Authorization: Bearer <access_token>`.
+	// Разбор строки по каждому слову:
+	//   - `AccessToken`          — имя поля (с Большой буквы);
+	//   - `string`               — тип поля: строка;
+	//   - `` `json:"access_token"` `` — структурный тег: в JSON станет ключом `"access_token"`.
+	AccessToken string `json:"access_token"`
+	// RefreshToken — долгоживущий токен (вместо access-токена не принимается).
+	// Разбор строки по каждому слову:
+	//   - `RefreshToken`          — имя поля (с Большой буквы);
+	//   - `string`                — тип поля: строка;
+	//   - `` `json:"refresh_token"` `` — структурный тег: в JSON станет ключом `"refresh_token"`.
+	RefreshToken string `json:"refresh_token"`
+}
+
 // signUp — HTTP-обработчик для регистрации нового пользователя (`POST /sign-up`).
 //
 // Вспомним параметры любого обработчика в стандартной библиотеке `net/http`:
@@ -198,7 +229,7 @@ func (h *Handler) signUp(w http.ResponseWriter, r *http.Request) {
 		//   - `w,`                     — 1-й аргумент: интерфейс ответа;
 		//   - `http.StatusBadRequest,`  — 2-й аргумент: код `400 Bad Request`;
 		//   - `"invalid request body")` — 3-й аргумент: текст ошибки.
-		writeError(w, http.StatusBadRequest, "некорректное тело запроса")
+		writeError(w, http.StatusBadRequest, "invalid request body")
 		// ОБЯЗАТЕЛЬНО пишем `return`, чтобы остановить выполнение функции!
 		// Если забыть `return`, код пойдёт дальше на Шаг 2 с пустыми данными.
 		// Разбор строки по каждому слову:
@@ -294,20 +325,20 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		//   - `w,`                      — 1-й аргумент: интерфейс ответа;
 		//   - `http.StatusBadRequest,`  — 2-й аргумент: статус `400 Bad Request`;
 		//   - `"invalid request body")` — 3-й аргумент: текст ошибки.
-		writeError(w, http.StatusBadRequest, "некорректное тело запроса")
+		writeError(w, http.StatusBadRequest, "invalid request body")
 		// Разбор строки по каждому слову:
 		//   - `return` — завершаем выполнение обработчика `login`.
 		return
 	}
 
 	// ========================================================================
-	// ШАГ 2. Просим сервис проверить почту/пароль и сгенерировать JWT-токен
+	// ШАГ 2. Просим сервис проверить почту/пароль и сгенерировать пару JWT-токенов
 	// ========================================================================
 	// Разбор строки по каждому слову:
-	//   - `token, err`    — создаём переменные `token` (строка JWT) и `err` (ошибка);
+	//   - `tokens, err`   — создаём переменные `tokens` (`models.TokenPair`) и `err` (ошибка);
 	//   - `:=`            — объявляем и присваиваем;
 	//   - `h.auth.Login(` — вызываем метод `Login` у сервиса `h.auth`, передавая `r.Context()` и `models.LoginInput`.
-	token, err := h.auth.Login(r.Context(), models.LoginInput{
+	tokens, err := h.auth.Login(r.Context(), models.LoginInput{
 		// Разбор строки по каждому слову:
 		//   - `Email:`     — поле `Email` структуры `models.LoginInput`;
 		//   - `req.Email,` — почта из прочитанного JSON-запроса `req`.
@@ -333,13 +364,16 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ========================================================================
-	// ШАГ 3. Отправляем клиенту статус 200 OK и выданный токен: `{"token": "eyJhbG..."}`
+	// ШАГ 3. Отправляем клиенту статус 200 OK и оба токена:
+	//        `{"access_token": "eyJhbG...", "refresh_token": "eyJhbG..."}`
 	// ========================================================================
-	// Разбор строки: `writeJSON(w, http.StatusOK, map[string]string{"token": token})`.
 	// Разбор строки по каждому слову:
-	//   - `writeJSON(`                        — вызываем функцию отправки JSON-ответа;
-	//   - `w,`                                — 1-й аргумент: интерфейс ответа;
-	//   - `http.StatusOK,`                    — 2-й аргумент: статус `200 OK`;
-	//   - `map[string]string{"token": token})` — 3-й аргумент: словарь с ключом `"token"` и строкой JWT-токена.
-	writeJSON(w, http.StatusOK, map[string]string{"token": token})
+	//   - `writeJSON(`      — вызываем функцию отправки JSON-ответа;
+	//   - `w,`              — 1-й аргумент: интерфейс ответа;
+	//   - `http.StatusOK,`  — 2-й аргумент: статус `200 OK`;
+	//   - `loginResponse{`  — 3-й аргумент: структура ответа с тегами `access_token` и `refresh_token`.
+	writeJSON(w, http.StatusOK, loginResponse{
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+	})
 }

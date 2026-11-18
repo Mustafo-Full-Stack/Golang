@@ -18,6 +18,11 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+type loginResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
 func (h *Handler) signUp(w http.ResponseWriter, r *http.Request) {
 	var req signUpRequest
 
@@ -48,7 +53,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.auth.Login(r.Context(), models.LoginInput{
+	tokens, err := h.auth.Login(r.Context(), models.LoginInput{
 		Email:    req.Email,
 		Password: req.Password,
 	})
@@ -58,5 +63,8 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"token": token})
+	writeJSON(w, http.StatusOK, loginResponse{
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+	})
 }

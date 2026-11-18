@@ -9,17 +9,22 @@ import (
 )
 
 type Config struct {
-	HTTPPort  string
-	JWTSecret string
-	JWTTTL    time.Duration
-	Postgres  postgres.Config
+	HTTPPort   string
+	JWTSecret  string
+	AccessTTL  time.Duration
+	RefreshTTL time.Duration
+	Postgres   postgres.Config
 }
 
 func Load() (*Config, error) {
-	ttl, err := time.ParseDuration(getEnv("JWT_TTL", "24h"))
+	accessTTL, err := time.ParseDuration(getEnv("ACCESS_TOKEN_TTL", "15m"))
+	if err != nil || accessTTL <= 0 {
+		return nil, fmt.Errorf("invalid ACCESS_TOKEN_TTL: %w", err)
+	}
 
-	if err != nil {
-		return nil, fmt.Errorf("invalid JWT_TTL: %w", err)
+	refreshTTL, err := time.ParseDuration(getEnv("REFRESH_TOKEN_TTL", "720h"))
+	if err != nil || refreshTTL <= 0 {
+		return nil, fmt.Errorf("invalid REFRESH_TOKEN_TTL: %w", err)
 	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")
@@ -29,9 +34,10 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		HTTPPort:  getEnv("HTTP_PORT", "8080"),
-		JWTSecret: jwtSecret,
-		JWTTTL:    ttl,
+		HTTPPort:   getEnv("HTTP_PORT", "8080"),
+		JWTSecret:  jwtSecret,
+		AccessTTL:  accessTTL,
+		RefreshTTL: refreshTTL,
 		Postgres: postgres.Config{
 			Host:     getEnv("POSTGRES_HOST", "localhost"),
 			Port:     getEnv("POSTGRES_PORT", "5432"),

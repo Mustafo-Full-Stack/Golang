@@ -1,15 +1,32 @@
+# ============================================================================
+# ФАЙЛ: docs/openapi.yaml
+# ЗАЧЕМ НУЖЕН: Спецификация нашего REST API по стандарту OpenAPI 3.0.3
+# (для Swagger UI, Swagger Editor или импорта в Postman).
+#
+# Обновлено под актуальную версию из `habit-tracker`:
+#   - `POST /login` возвращает пару токенов: `access_token` и `refresh_token`;
+#   - для доступа к `/habits...` принимается только `access_token` (`refresh_token` вернёт 401);
+#   - примеры ошибок приведены к реальным ответам сервера на английском языке.
+# ============================================================================
+
 openapi: 3.0.3
 info:
-  title: Трекер привычек
+  title: habit-tracker
   version: 1.0.0
-  description: Регистрация, вход и ежедневный учёт привычек. Пользователь видит только свои привычки.
+  description: |
+    API трекера привычек: регистрация, логин, создание привычек и отметки их ежедневного выполнения.
+
+    Аутентификация через JWT: после `/login` передавайте `access_token`
+    в заголовке `Authorization: Bearer <token>`. Токены на сервере не хранятся,
+    поэтому отдельной ручки logout нет — клиент просто удаляет токен у себя.
 servers:
   - url: http://localhost:8080
 tags:
   - name: auth
     description: Аутентификация
   - name: habits
-    description: Привычки и отметки. Все ручки требуют Bearer-токен из /login.
+    description: Привычки и отметки выполнения. Все ручки требуют Bearer-токен из /login.
+
 paths:
   /sign-up:
     post:
@@ -30,7 +47,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SignUpResponse'
         '400':
-          description: Невалидное тело запроса или пустые поля
+          description: Невалидное тело запроса, пустые поля или пароль не подходит по длине
           content:
             application/json:
               schema:
@@ -39,13 +56,13 @@ paths:
                 invalidBody:
                   value: { error: invalid request body }
                 invalidInput:
-                  value: { error: required fields are missing }
+                  value: { error: invalid input }
                 passwordTooShort:
-                  value: { error: password must be at least 8 characters }
+                  value: { error: password too short }
                 passwordTooLong:
-                  value: { error: password must be at most 72 bytes }
+                  value: { error: password too long }
         '409':
-          description: Пользователь с таким email уже есть
+          description: Пользователь с таким email уже существует
           content:
             application/json:
               schema:
@@ -57,8 +74,11 @@ paths:
   /login:
     post:
       tags: [auth]
-      summary: Вход
-      description: Возвращает JWT для аутентификации запросов к защищённым маршрутам.
+      summary: Логин
+      description: |
+        Возвращает пару JWT, подписанных HS256:
+        - `access_token` — для заголовка `Authorization: Bearer <token>`, живёт `ACCESS_TOKEN_TTL` (по умолчанию 15 минут);
+        - `refresh_token` — живёт `REFRESH_TOKEN_TTL` (по умолчанию 30 дней). Вместо access не принимается.
       operationId: login
       requestBody:
         required: true
@@ -68,7 +88,7 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
-          description: Успешный вход
+          description: Успешный логин
           content:
             application/json:
               schema:
@@ -83,7 +103,7 @@ paths:
                 invalidBody:
                   value: { error: invalid request body }
                 invalidInput:
-                  value: { error: required fields are missing }
+                  value: { error: invalid input }
         '401':
           description: Неверный email или пароль
           content:
@@ -95,28 +115,12 @@ paths:
           $ref: '#/components/responses/InternalError'
 
   /habits:
-    get:
-      tags: [habits]
-      summary: Список своих привычек
-      operationId: listHabits
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Привычки текущего пользователя
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Habit'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalError'
     post:
       tags: [habits]
-      summary: Создать привычку
+      summary: Создание привычки
+      description: |
+        Создаёт новую привычку для текущего пользователя (из JWT-токена).
+        Пробелы по краям `name` обрезаются, максимальная длина — 100 символов.
       operationId: createHabit
       security:
         - bearerAuth: []
@@ -134,7 +138,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Habit'
         '400':
-          description: Пустое название или невалидное тело
+          description: Невалидное тело запроса или название привычки
           content:
             application/json:
               schema:
@@ -143,7 +147,28 @@ paths:
                 invalidBody:
                   value: { error: invalid request body }
                 invalidInput:
-                  value: { error: required fields are missing }
+                  value: { error: invalid input }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    get:
+      tags: [habits]
+      summary: Список привычек пользователя
+      description: Возвращает все привычки текущего пользователя, отсортированные по `id`.
+      operationId: listHabits
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список привычек
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Habit'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
@@ -152,28 +177,29 @@ paths:
   /habits/{id}/check:
     post:
       tags: [habits]
-      summary: Отметить привычку за сегодня
-      description: Повторная отметка за тот же день не создаёт дубль и возвращает 409.
+      summary: Отметить привычку выполненной за сегодня
+      description: |
+        Создаёт отметку выполнения привычки за текущую дату (по UTC).
+        Отметить можно только свою привычку и не более одного раза в день.
       operationId: checkHabit
       security:
         - bearerAuth: []
       parameters:
-        - $ref: '#/components/parameters/HabitId'
+        - $ref: '#/components/parameters/HabitID'
       responses:
         '201':
-          description: Отметка сохранена
+          description: Привычка отмечена выполненной
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StatusResponse'
-              example: { status: checked }
+                $ref: '#/components/schemas/CheckHabitResponse'
         '400':
-          description: Некорректный id в адресе
+          description: Некорректный ID привычки в URL
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-              example: { error: invalid habit id }
+              example: { error: invalid habit ID }
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -193,15 +219,16 @@ paths:
   /habits/{id}/checks:
     get:
       tags: [habits]
-      summary: Отметки привычки по дням
+      summary: История отметок привычки
+      description: Возвращает все даты выполнения указанной привычки, отсортированные по возрастанию даты.
       operationId: listChecks
       security:
         - bearerAuth: []
       parameters:
-        - $ref: '#/components/parameters/HabitId'
+        - $ref: '#/components/parameters/HabitID'
       responses:
         '200':
-          description: Даты, в которые привычка была выполнена
+          description: Список дат выполнения
           content:
             application/json:
               schema:
@@ -209,12 +236,12 @@ paths:
                 items:
                   $ref: '#/components/schemas/HabitCheck'
         '400':
-          description: Некорректный id в адресе
+          description: Некорректный ID привычки в URL
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-              example: { error: invalid habit id }
+              example: { error: invalid habit ID }
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -232,11 +259,11 @@ components:
       bearerFormat: JWT
 
   parameters:
-    HabitId:
+    HabitID:
       name: id
       in: path
       required: true
-      description: Идентификатор привычки
+      description: ID привычки
       schema:
         type: integer
         format: int64
@@ -244,14 +271,14 @@ components:
 
   responses:
     Unauthorized:
-      description: Токен не передан или невалиден
+      description: Токен не передан, невалиден, просрочен или это refresh-токен вместо access
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
           examples:
-            missingToken:
-              value: { error: missing bearer token }
+            missingHeader:
+              value: { error: missing or invalid authorization header }
             invalidToken:
               value: { error: invalid or missing token }
 
@@ -261,7 +288,7 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-          example: { error: access denied }
+          example: { error: forbidden }
 
     NotFound:
       description: Привычка не найдена
@@ -286,16 +313,19 @@ components:
       properties:
         name:
           type: string
-          example: Ali
+          description: Пробелы по краям обрезаются, пустое имя не принимается.
+          example: Mustafo
         email:
           type: string
           format: email
-          description: Email, по которому потом выполняется вход.
-          example: ali@mail.ru
+          description: Пробелы обрезаются, приводится к нижнему регистру.
+          example: mustafo@mail.com
         password:
           type: string
           format: password
-          description: От 8 до 72 байт. Хранится только в виде bcrypt-хеша.
+          minLength: 8
+          maxLength: 72
+          description: От 8 до 72 байт (ограничение bcrypt).
           example: secret123
 
     SignUpResponse:
@@ -314,20 +344,25 @@ components:
         email:
           type: string
           format: email
-          example: ali@mail.ru
+          example: mustafo@mail.com
         password:
           type: string
           format: password
           example: secret123
 
+    # Схема ответа при логине: теперь возвращаются сразу два токена — access_token и refresh_token
     LoginResponse:
       type: object
-      required: [token]
+      required: [access_token, refresh_token]
       properties:
-        token:
+        access_token:
           type: string
-          description: JWT. В поле sub записан id пользователя.
-          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.signature
+          description: 'JWT с полями `user_id`, `type: access`, `iat`, `exp`.'
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refresh_token:
+          type: string
+          description: 'JWT с полями `user_id`, `type: refresh`, `iat`, `exp`.'
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
     CreateHabitRequest:
       type: object
@@ -335,7 +370,10 @@ components:
       properties:
         name:
           type: string
-          example: Читать
+          minLength: 1
+          maxLength: 100
+          description: От 1 до 100 символов после обрезки пробелов.
+          example: Читать 30 минут в день
 
     Habit:
       type: object
@@ -347,11 +385,19 @@ components:
           example: 1
         name:
           type: string
-          example: Читать
+          example: Читать 30 минут в день
         created_at:
           type: string
           format: date-time
-          example: '2026-10-31T10:00:00Z'
+          example: '2026-11-15T12:00:00Z'
+
+    CheckHabitResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: checked
 
     HabitCheck:
       type: object
@@ -360,15 +406,8 @@ components:
         date:
           type: string
           format: date
-          example: '2026-10-31'
-
-    StatusResponse:
-      type: object
-      required: [status]
-      properties:
-        status:
-          type: string
-          example: checked
+          description: Дата выполнения в формате YYYY-MM-DD (UTC).
+          example: '2026-11-15'
 
     Error:
       type: object

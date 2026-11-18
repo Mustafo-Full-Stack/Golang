@@ -38,7 +38,7 @@ REST API на Go 1.22+ и PostgreSQL. Реализованы регистрац�
    go run ./cmd/api
    ```
 
-   При успешном запуске появится сообщение `http server listening on :8080`.
+   При успешном запуске появится сообщение `http server is running on port 8080`.
    Запросы `curl` или коллекцию Postman запускайте во втором терминале.
 
 Приложение читает настройки из переменных окружения и самостоятельно не загружает файл `.env`.
@@ -66,13 +66,13 @@ Docker Compose дождётся готовности PostgreSQL, примени�
 ## Эндпоинты
 
 - `POST /sign-up` — регистрация: `{"name":"Имя","email":"user@example.com","password":"пароль"}`, ответ `201 {"id":1}`.
-- `POST /login` — вход: `{"email":"user@example.com","password":"пароль"}`, ответ `200 {"token":"..."}`.
-- `POST /habits` — создать привычку: `{"name":"Читать"}`, требуется токен.
-- `GET /habits` — список своих привычек, требуется токен.
-- `POST /habits/{id}/check` — отметить привычку за сегодня, требуется токен.
-- `GET /habits/{id}/checks` — список отметок привычки по дням, требуется токен.
+- `POST /login` — вход: `{"email":"user@example.com","password":"пароль"}`, ответ `200 {"access_token":"...","refresh_token":"..."}`.
+- `POST /habits` — создать привычку: `{"name":"Читать"}`, требуется `access_token`.
+- `GET /habits` — список своих привычек, требуется `access_token`.
+- `POST /habits/{id}/check` — отметить привычку за сегодня, требуется `access_token`.
+- `GET /habits/{id}/checks` — список отметок привычки по дням, требуется `access_token`.
 
-Для защищённых маршрутов передавайте JWT в заголовке `Authorization: Bearer <token>`.
+Для защищённых маршрутов передавайте `access_token` в заголовке `Authorization: Bearer <access_token>` (`refresh_token` вместо `access_token` не принимается).
 
 ## Ошибки
 

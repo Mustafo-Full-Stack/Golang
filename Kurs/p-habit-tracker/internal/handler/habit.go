@@ -216,7 +216,7 @@ func (h *Handler) createHabit(w http.ResponseWriter, r *http.Request) {
 		//   - `w,`                      — 1-й аргумент: интерфейс ответа;
 		//   - `http.StatusBadRequest,`  — 2-й аргумент: статус `400 Bad Request`;
 		//   - `"invalid request body")` — 3-й аргумент: текст ошибки.
-		writeError(w, http.StatusBadRequest, "некорректное тело запроса")
+		writeError(w, http.StatusBadRequest, "invalid request body")
 		// Разбор строки по каждому слову:
 		//   - `return` — выходим из обработчика `createHabit`.
 		return
@@ -384,8 +384,8 @@ func (h *Handler) checkHabit(w http.ResponseWriter, r *http.Request) {
 		//   - `writeError(`           — вызываем функцию отправки JSON-ошибки;
 		//   - `w,`                    — 1-й аргумент: интерфейс ответа;
 		//   - `http.StatusBadRequest,` — 2-й аргумент: статус `400 Bad Request`;
-		//   - `"invalid habit id")`   — 3-й аргумент: текст ошибки.
-		writeError(w, http.StatusBadRequest, "некорректный ID привычки")
+		//   - `"invalid habit ID")`   — 3-й аргумент: текст ошибки.
+		writeError(w, http.StatusBadRequest, "invalid habit ID")
 		// Разбор строки по каждому слову:
 		//   - `return` — выходим из обработчика `checkHabit`.
 		return
@@ -445,8 +445,8 @@ func (h *Handler) listChecks(w http.ResponseWriter, r *http.Request) {
 		//   - `writeError(`           — отправляем JSON-ошибку;
 		//   - `w,`                    — 1-й аргумент: интерфейс ответа;
 		//   - `http.StatusBadRequest,` — 2-й аргумент: статус `400 Bad Request`;
-		//   - `"invalid habit id")`   — 3-й аргумент: текст ошибки.
-		writeError(w, http.StatusBadRequest, "некорректный ID привычки")
+		//   - `"invalid habit ID")`   — 3-й аргумент: текст ошибки.
+		writeError(w, http.StatusBadRequest, "invalid habit ID")
 		// Разбор строки по каждому слову:
 		//   - `return` — выходим из обработчика `listChecks`.
 		return

@@ -37,7 +37,7 @@ func Run() error {
 
 	users := userrepo.NewRepository(pool)
 
-	authService := auth.NewService(users, cfg.JWTSecret, cfg.JWTTTL)
+	authService := auth.NewService(users, cfg.JWTSecret, cfg.AccessTTL, cfg.RefreshTTL)
 
 	habits := habitrepo.NewRepository(pool)
 

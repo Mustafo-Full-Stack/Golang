@@ -237,8 +237,8 @@ func (r *Repository) Create(ctx context.Context, u *models.User) error {
 //   - `(ctx context.Context,` — 1-й входной параметр: контекст запроса `ctx`;
 //   - `email string)`         — 2-й входной параметр: строка почты `email` типа `string`;
 //   - `(*models.User, error)` — метод возвращает ДВА значения:
-//                               1) `*models.User` — указатель на найденного пользователя (или `nil`);
-//                               2) `error`        — ошибку (или `nil`);
+//     1) `*models.User` — указатель на найденного пользователя (или `nil`);
+//     2) `error`        — ошибку (или `nil`);
 //   - `{`                     — открываем тело метода.
 func (r *Repository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
 	// Создаём пустую структуру `u`, в которую `Scan` перепишет данные из найденной строки таблицы.

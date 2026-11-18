@@ -5,7 +5,7 @@ info:
   description: |
     API трекера привычек: регистрация, логин, создание привычек и отметки их ежедневного выполнения.
 
-    Аутентификация через JWT: после `/login` передавайте полученный `token`
+    Аутентификация через JWT: после `/login` передавайте `access_token`
     в заголовке `Authorization: Bearer <token>`. Токены на сервере не хранятся,
     поэтому отдельной ручки logout нет — клиент просто удаляет токен у себя.
 servers:
@@ -65,9 +65,9 @@ paths:
       tags: [auth]
       summary: Логин
       description: |
-        Возвращает JWT-токен, подписанный HS256 (`sub` содержит ID пользователя).
-        Передавайте его в заголовке `Authorization: Bearer <token>`.
-        Время жизни задаётся переменной `JWT_TTL` (по умолчанию 24 часа).
+        Возвращает пару JWT, подписанных HS256:
+        - `access_token` — для заголовка `Authorization: Bearer <token>`, живёт `ACCESS_TOKEN_TTL` (по умолчанию 15 минут);
+        - `refresh_token` — живёт `REFRESH_TOKEN_TTL` (по умолчанию 30 дней). Вместо access не принимается.
       operationId: login
       requestBody:
         required: true
@@ -260,7 +260,7 @@ components:
 
   responses:
     Unauthorized:
-      description: Токен не передан, невалиден или просрочен
+      description: Токен не передан, невалиден, просрочен или это refresh-токен вместо access
       content:
         application/json:
           schema:
@@ -341,11 +341,15 @@ components:
 
     LoginResponse:
       type: object
-      required: [token]
+      required: [access_token, refresh_token]
       properties:
-        token:
+        access_token:
           type: string
-          description: 'JWT с полями `sub` (ID пользователя), `iat`, `exp`.'
+          description: 'JWT с полями `user_id`, `type: access`, `iat`, `exp`.'
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refresh_token:
+          type: string
+          description: 'JWT с полями `user_id`, `type: refresh`, `iat`, `exp`.'
           example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
     CreateHabitRequest:

@@ -180,13 +180,13 @@ func (h *Handler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		//   - `strings.HasPrefix(header, "Bearer ")`  — строка `header` начинается с префикса `"Bearer "`;
 		//   - `{`                                     — открываем блок ошибки.
 		if !strings.HasPrefix(header, "Bearer ") {
-			// Разбор строки: отправляем статус 401 Unauthorized и сообщение `"missing bearer token"`.
+			// Разбор строки: отправляем статус 401 Unauthorized и сообщение `"missing or invalid authorization header"`.
 			// Разбор строки по каждому слову:
-			//   - `writeError(`             — вызываем функцию отправки JSON-ошибки;
-			//   - `w,`                      — 1-й аргумент: интерфейс ответа;
-			//   - `http.StatusUnauthorized,` — 2-й аргумент: статус `401 Unauthorized`;
-			//   - `"missing bearer token")` — 3-й аргумент: текст ошибки.
-			writeError(w, http.StatusUnauthorized, "отсутствует токен авторизации (Bearer)")
+			//   - `writeError(`                                  — вызываем функцию отправки JSON-ошибки;
+			//   - `w,`                                           — 1-й аргумент: интерфейс ответа;
+			//   - `http.StatusUnauthorized,`                      — 2-й аргумент: статус `401 Unauthorized`;
+			//   - `"missing or invalid authorization header")`    — 3-й аргумент: текст ошибки.
+			writeError(w, http.StatusUnauthorized, "missing or invalid authorization header")
 			// `return` — выходим и НЕ пускаем запрос дальше в `next`!
 			// Разбор строки по каждому слову:
 			//   - `return` — завершаем работу функции-обёртки (запрос дальше не идёт).
@@ -196,14 +196,14 @@ func (h *Handler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		// ====================================================================
 		// ШАГ 2. Вырезаем сам токен из строки заголовка
 		// ====================================================================
-		// `strings.TrimPrefix(header, "Bearer ")` отрезает слово `"Bearer "` спереди.
-		// `strings.TrimSpace(...)` убирает случайные лишние пробелы по краям.
+		// `strings.TrimPrefix(header, "Bearer")` отрезает слово `"Bearer"` спереди.
+		// `strings.TrimSpace(...)` убирает пробел после `"Bearer"` и любые случайные пробелы по краям.
 		// Разбор строки по каждому слову:
-		//   - `token`                                — имя переменной для чистого токена;
-		//   - `:=`                                   — создать и присвоить;
-		//   - `strings.TrimSpace(`                   — убрать пробелы по краям;
-		//   - `strings.TrimPrefix(header, "Bearer "))` — отрезать `"Bearer "` из начала строки `header`.
-		token := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
+		//   - `token`                                 — имя переменной для чистого токена;
+		//   - `:=`                                    — создать и присвоить;
+		//   - `strings.TrimSpace(`                    — убрать пробелы по краям;
+		//   - `strings.TrimPrefix(header, "Bearer"))` — отрезать `"Bearer"` из начала строки `header`.
+		token := strings.TrimSpace(strings.TrimPrefix(header, "Bearer"))
 		// Разбор строки: `if token == ""` — если после `"Bearer "` ничего не было написано:
 		// Разбор строки по каждому слову:
 		//   - `if`          — если;
@@ -211,11 +211,11 @@ func (h *Handler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		//   - `{`           — открываем блок ошибки.
 		if token == "" {
 			// Разбор строки по каждому слову:
-			//   - `writeError(`             — вызываем функцию отправки JSON-ошибки;
-			//   - `w,`                      — 1-й аргумент: интерфейс ответа;
-			//   - `http.StatusUnauthorized,` — 2-й аргумент: статус `401 Unauthorized`;
-			//   - `"missing bearer token")` — 3-й аргумент: текст ошибки.
-			writeError(w, http.StatusUnauthorized, "отсутствует токен авторизации (Bearer)")
+			//   - `writeError(`                                  — вызываем функцию отправки JSON-ошибки;
+			//   - `w,`                                           — 1-й аргумент: интерфейс ответа;
+			//   - `http.StatusUnauthorized,`                      — 2-й аргумент: статус `401 Unauthorized`;
+			//   - `"missing or invalid authorization header")`    — 3-й аргумент: текст ошибки.
+			writeError(w, http.StatusUnauthorized, "missing or invalid authorization header")
 			// Разбор строки по каждому слову:
 			//   - `return` — выходим из функции-обёртки.
 			return

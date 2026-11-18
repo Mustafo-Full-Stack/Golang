@@ -4,8 +4,9 @@
 // Здесь нет ни HTTP, ни SQL-запросов. Здесь описаны только структуры данных и ошибки,
 // которыми обмениваются между собой Handler, Service и Repository:
 //
-//   1. СУЩНОСТИ БАЗЫ ДАННЫХ (Entities):
-//      User, Habit, HabitCheck — то, как данные хранятся в таблицах PostgreSQL.
+//   1. СУЩНОСТИ БАЗЫ ДАННЫХ И МОДЕЛИ ОТВЕТОВ (Entities & Value Objects):
+//      User, Habit, HabitCheck — то, как данные хранятся в таблицах PostgreSQL;
+//      TokenPair               — пара JWT-токенов (AccessToken и RefreshToken), которую возвращает сервис авторизации при входе.
 //
 //   2. ВХОДНЫЕ ДАННЫЕ (DTO — Data Transfer Objects):
 //      RegisterInput, LoginInput, CreateHabitInput — сырые данные, пришедшие от пользователя,
@@ -121,7 +122,7 @@ import (
 // Константы (`const`) — значения, зашитые намертво. Их нельзя случайно изменить во время работы программы.
 // Почему мы не пишем просто числа 8, 72, 100 прямо в `if`?
 // В программировании числа без объяснения называют "магическими числами" (magic numbers) —
-// через месяц никто не вспомнит, почему тут написано 72. А имя `maxPasswordBytes` сразу всё объясняет!
+// через месяц никто не вспомнит, почему тут написано 72. А имя `maxPasswordLen` сразу всё объясняет!
 //
 // Разбор строки: `const (` — открываем блок объявления констант.
 const (
@@ -133,8 +134,8 @@ const (
 	minPasswordLen = 8
 	// Максимальная длина пароля в байтах — 72.
 	// Почему именно 72? Алгоритм шифрования bcrypt физически обрезает всё, что длиннее 72 байт!
-	// Разбор строки: `maxPasswordBytes` (имя константы) `=` (равно) `72` (значение).
-	maxPasswordBytes = 72
+	// Разбор строки: `maxPasswordLen` (имя константы) `=` (равно) `72` (значение).
+	maxPasswordLen = 72
 	// Максимальная длина названия привычки — 100 букв (рун).
 	// Разбор строки: `maxHabitNameRunes` (имя константы) `=` (равно) `100` (значение).
 	maxHabitNameRunes = 100
@@ -209,6 +210,43 @@ type HabitCheck struct {
 	Date time.Time
 }
 
+// TokenPair — пара JWT-токенов, которую метод `auth.Service.Login` возвращает после успешного входа.
+//
+// ЗАЧЕМ НУЖНЫ ДВА ТОКЕНА ВМЕСТО ОДНОГО?
+//   - `AccessToken` ("пропуск на короткое время", например 15 минут) — его клиент прикрепляет
+//     к каждому запросу (`Authorization: Bearer <access_token>`). Если его украдут, вор сможет
+//     пользоваться аккаунтом максимум 15 минут!
+//   - `RefreshToken` ("запасной ключ на долгий срок", например 30 дней / 720 часов) — нужен,
+//     чтобы в будущем получать новый `AccessToken` без повторного ввода пароля.
+//     Наш сервер специально запрещает использовать `RefreshToken` вместо `AccessToken` в защищённых ручках!
+//
+// 🧒 ДЛЯ 10-ЛЕТНЕГО РЕБЁНКА:
+//
+//	Представь билет в парк аттракционов (`TokenPair`):
+//	  1) `AccessToken` — это бумажный браслет на руке, с которым пускают на горки (действует 15 минут).
+//	  2) `RefreshToken` — это карточка в кошельке дома на 30 дней: на горки по ней не пускают,
+//	     она нужна только для того, чтобы подтвердить, что ты настоящий владелец абонемента.
+//
+// 🍕 ПРИМЕР НА РЕСТОРАНЕ:
+//
+//	После проверки гостя на входе (`POST /login`) менеджер выдаёт комплект `TokenPair`:
+//	- дневной браслет гостя (`AccessToken`) для заказа блюд в зале;
+//	- долгосрочную карту постоянного клиента (`RefreshToken`) в сейф гостя.
+//
+// Разбор строки по каждому слову:
+//   - `type`      — создаём новый тип данных;
+//   - `TokenPair` — имя структуры (`models.TokenPair`, с Большой буквы = доступна другим пакетам);
+//   - `struct`    — это структура (коробка из двух полей);
+//   - `{`         — открываем список полей.
+type TokenPair struct {
+	// AccessToken — короткоживущий JWT-токен для доступа к защищённым маршрутам (`/habits`).
+	// Разбор строки: `AccessToken` (имя публичного поля) `string` (тип: строка).
+	AccessToken string
+	// RefreshToken — долгоживущий JWT-токен (в защищённых маршрутах вместо access не принимается).
+	// Разбор строки: `RefreshToken` (имя публичного поля) `string` (тип: строка).
+	RefreshToken string
+}
+
 // ============================================================================
 // ЧАСТЬ 2: ВХОДНЫЕ СТРУКТУРЫ И ИХ ПРОВЕРКА (Валидация)
 // ============================================================================
@@ -230,7 +268,7 @@ type RegisterInput struct {
 // Разбор строки по каждому слову от начала до конца:
 //   - `func`                — ключевое слово объявления функции/метода;
 //   - `(in *RegisterInput)` — ПОЛУЧАТЕЛЬ-УКАЗАТЕЛЬ: переменная `in` с типом `*RegisterInput` (указатель на структуру).
-//                             Звёздочка `*` нужна, чтобы очищенные `in.Name` и `in.Email` изменились в самом оригинале!;
+//     Звёздочка `*` нужна, чтобы очищенные `in.Name` и `in.Email` изменились в самом оригинале!;
 //   - `Validate`            — имя метода (вызывается как `in.Validate()`);
 //   - `()`                  — метод не принимает дополнительных параметров;
 //   - `error`               — метод возвращает ошибку `error` (или `nil`, если все данные в порядке);
@@ -290,9 +328,9 @@ func (in *RegisterInput) Validate() error {
 	//   - `if`               — если;
 	//   - `len(in.Password)` — длина пароля в байтах;
 	//   - `>`                — больше чем;
-	//   - `maxPasswordBytes` — константа `72`;
+	//   - `maxPasswordLen`   — константа `72`;
 	//   - `{`                — открываем блок ошибки.
-	if len(in.Password) > maxPasswordBytes {
+	if len(in.Password) > maxPasswordLen {
 		// Разбор строки: `return ErrPasswordTooLong` — возвращаем ошибку "пароль слишком длинный".
 		// Разбор строки по каждому слову:
 		//   - `return`             — выйти из метода `Validate`;
@@ -443,23 +481,26 @@ func (in *CreateHabitInput) Validate() error {
 //   - `Err...`            — имя публичной переменной ошибки;
 //   - `=`                 — присвоить значение;
 //   - `errors.New("...")` — функция `New` из пакета `errors` создаёт ошибку с указанным текстом.
+//
+// Тексты ошибок написаны на английском — именно они попадают в JSON-ответы API
+// (и совпадают с примерами в документации `docs/openapi.yaml`).
 var (
 	// ErrNotFound — запрашиваемые данные не найдены в базе (HTTP 404 Not Found).
-	ErrNotFound = errors.New("не найдено")
+	ErrNotFound = errors.New("not found")
 	// ErrInvalidInput — пустые поля или неверный формат данных (HTTP 400 Bad Request).
-	ErrInvalidInput = errors.New("не заполнены обязательные поля")
+	ErrInvalidInput = errors.New("invalid input")
 	// ErrPasswordTooShort — пароль короче 8 символов (HTTP 400 Bad Request).
-	ErrPasswordTooShort = errors.New("пароль должен содержать минимум 8 символов")
+	ErrPasswordTooShort = errors.New("password too short")
 	// ErrPasswordTooLong — пароль длиннее 72 байт (HTTP 400 Bad Request).
-	ErrPasswordTooLong = errors.New("пароль не должен превышать 72 байта")
+	ErrPasswordTooLong = errors.New("password too long")
 	// ErrInvalidCredentials — неверная почта или пароль при входе (HTTP 401 Unauthorized).
-	ErrInvalidCredentials = errors.New("неверный email или пароль")
+	ErrInvalidCredentials = errors.New("invalid email or password")
 	// ErrUserExists — такая почта уже зарегистрирована (HTTP 409 Conflict).
-	ErrUserExists = errors.New("пользователь с таким email уже существует")
-	// ErrInvalidToken — токен отсутствует, просрочен или подделан (HTTP 401 Unauthorized).
-	ErrInvalidToken = errors.New("неверный или отсутствующий токен")
+	ErrUserExists = errors.New("user already exists")
+	// ErrInvalidToken — токен отсутствует, просрочен, подделан или передан refresh вместо access (HTTP 401 Unauthorized).
+	ErrInvalidToken = errors.New("invalid or missing token")
 	// ErrForbidden — попытка изменить или посмотреть чужую привычку (HTTP 403 Forbidden).
-	ErrForbidden = errors.New("доступ запрещён")
+	ErrForbidden = errors.New("forbidden")
 	// ErrAlreadyChecked — галочка за сегодняшний день уже стоит (HTTP 409 Conflict).
-	ErrAlreadyChecked = errors.New("привычка уже отмечена сегодня")
+	ErrAlreadyChecked = errors.New("habit already checked today")
 )

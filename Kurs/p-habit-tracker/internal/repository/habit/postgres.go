@@ -179,8 +179,8 @@ func (r *Repository) Create(ctx context.Context, h *models.Habit) error {
 //   - `(ctx context.Context,`   — 1-й входной параметр: контекст `ctx`;
 //   - `userID int64)`           — 2-й входной параметр: ID пользователя типа `int64`;
 //   - `([]models.Habit, error)` — метод возвращает ДВА значения:
-//                                 1) `[]models.Habit` — слайс (список) привычек `models.Habit`;
-//                                 2) `error`          — ошибку (или `nil`);
+//     1) `[]models.Habit` — слайс (список) привычек `models.Habit`;
+//     2) `error`          — ошибку (или `nil`);
 //   - `{`                       — открываем тело метода.
 func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]models.Habit, error) {
 	// ШАГ 1. Отправляем запрос через `.Query(...)`, потому что у пользователя может быть много привычек.
