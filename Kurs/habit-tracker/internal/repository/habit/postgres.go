@@ -27,11 +27,12 @@ func (r *Repository) Create(ctx context.Context, h *models.Habit) error {
 	).Scan(&h.ID, &h.CreatedAt)
 }
 
-func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]models.Habit, error) {
+func (r *Repository) ListByUser(ctx context.Context, userID int64, limit, offset int) ([]models.Habit, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, user_id, name, created_at FROM habits
-			 WHERE user_id = $1 ORDER BY id`,
-		userID,
+		WHERE user_id = $1 ORDER BY id
+		LIMIT $2 OFFSET $3`,
+		userID, limit, offset,
 	)
 
 	if err != nil {
@@ -52,6 +53,10 @@ func (r *Repository) ListByUser(ctx context.Context, userID int64) ([]models.Hab
 	}
 
 	return list, rows.Err()
+}
+
+func (r *Repository) CountByUser(ctx context.Context, userID int64) (int64, error) {
+	return r.countByID(ctx, `SELECT count(*) FROM habits WHERE user_id = $1`, userID)
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (*models.Habit, error) {
@@ -88,11 +93,12 @@ func (r *Repository) CreateCheck(ctx context.Context, habitID int64, date time.T
 	return nil
 }
 
-func (r *Repository) ListChecks(ctx context.Context, habitID int64) ([]models.HabitCheck, error) {
+func (r *Repository) ListChecks(ctx context.Context, habitID int64, limit, offset int) ([]models.HabitCheck, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, habit_id, date FROM habit_checks
-		WHERE habit_id = $1 ORDER BY date`,
-		habitID,
+		WHERE habit_id = $1 ORDER BY date
+		LIMIT $2 OFFSET $3`,
+		habitID, limit, offset,
 	)
 	if err != nil {
 		return nil, err
@@ -112,4 +118,18 @@ func (r *Repository) ListChecks(ctx context.Context, habitID int64) ([]models.Ha
 	}
 
 	return list, rows.Err()
+}
+
+func (r *Repository) CountChecks(ctx context.Context, habitID int64) (int64, error) {
+	return r.countByID(ctx, `SELECT count(*) FROM habit_checks WHERE habit_id = $1`, habitID)
+}
+
+func (r *Repository) countByID(ctx context.Context, query string, id int64) (int64, error) {
+	var total int64
+
+	if err := r.db.QueryRow(ctx, query, id).Scan(&total); err != nil {
+		return 0, err
+	}
+
+	return total, nil
 }

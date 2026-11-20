@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS habits (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE INDEX IF NOT EXISTS habits_user_id_id_idx ON habits (user_id, id);
+
 CREATE TABLE IF NOT EXISTS habit_checks (
     id BIGSERIAL PRIMARY KEY,
     habit_id BIGINT NOT NULL REFERENCES habits (id) ON DELETE CASCADE,

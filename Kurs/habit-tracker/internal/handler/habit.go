@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const defaultListLimit = 20
+
 type createHabitRequest struct {
 	Name string `json:"name"`
 }
@@ -20,6 +22,13 @@ type habitResponse struct {
 
 type checkResponse struct {
 	Date string `json:"date"`
+}
+
+type listResponse[T any] struct {
+	Items  []T   `json:"items"`
+	Limit  int   `json:"limit"`
+	Offset int   `json:"offset"`
+	Total  int64 `json:"total"`
 }
 
 func (h *Handler) createHabit(w http.ResponseWriter, r *http.Request) {
@@ -48,23 +57,33 @@ func (h *Handler) createHabit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listHabits(w http.ResponseWriter, r *http.Request) {
-	habits, err := h.habit.List(r.Context(), currentUserID(r))
+	limit, offset, ok := parsePagination(w, r)
+	if !ok {
+		return
+	}
+
+	habits, total, err := h.habit.List(r.Context(), currentUserID(r), limit, offset)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
 
-	resp := make([]habitResponse, 0, len(habits))
+	items := make([]habitResponse, 0, len(habits))
 
 	for _, habit := range habits {
-		resp = append(resp, habitResponse{
+		items = append(items, habitResponse{
 			ID:        habit.ID,
 			Name:      habit.Name,
 			CreatedAt: habit.CreatedAt,
 		})
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, listResponse[habitResponse]{
+		Items:  items,
+		Limit:  limit,
+		Offset: offset,
+		Total:  total,
+	})
 }
 
 func (h *Handler) checkHabit(w http.ResponseWriter, r *http.Request) {
@@ -91,22 +110,61 @@ func (h *Handler) listChecks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	checks, err := h.habit.Checks(r.Context(), currentUserID(r), habitID)
+	limit, offset, ok := parsePagination(w, r)
+	if !ok {
+		return
+	}
+
+	checks, total, err := h.habit.Checks(r.Context(), currentUserID(r), habitID, limit, offset)
 
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
 
-	resp := make([]checkResponse, 0, len(checks))
+	items := make([]checkResponse, 0, len(checks))
 
 	for _, check := range checks {
-		resp = append(resp, checkResponse{Date: check.Date.Format("2006-01-02")})
+		items = append(items, checkResponse{Date: check.Date.Format("2006-01-02")})
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, listResponse[checkResponse]{
+		Items:  items,
+		Limit:  limit,
+		Offset: offset,
+		Total:  total,
+	})
 }
 
 func parseID(r *http.Request) (int64, error) {
 	return strconv.ParseInt(r.PathValue("id"), 10, 64)
+}
+
+func parsePagination(w http.ResponseWriter, r *http.Request) (int, int, bool) {
+	limit, ok := queryInt(w, r, "limit", defaultListLimit)
+	if !ok {
+		return 0, 0, false
+	}
+
+	offset, ok := queryInt(w, r, "offset", 0)
+	if !ok {
+		return 0, 0, false
+	}
+
+	return limit, offset, true
+}
+
+func queryInt(w http.ResponseWriter, r *http.Request, name string, def int) (int, bool) {
+	raw := r.URL.Query().Get(name)
+	if raw == "" {
+		return def, true
+	}
+
+	val, err := strconv.Atoi(raw)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid "+name)
+		return 0, false
+	}
+
+	return val, true
 }
