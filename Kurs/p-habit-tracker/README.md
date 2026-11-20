@@ -68,15 +68,15 @@ Docker Compose дождётся готовности PostgreSQL, примени�
 - `POST /sign-up` — регистрация: `{"name":"Имя","email":"user@example.com","password":"пароль"}`, ответ `201 {"id":1}`.
 - `POST /login` — вход: `{"email":"user@example.com","password":"пароль"}`, ответ `200 {"access_token":"...","refresh_token":"..."}`.
 - `POST /habits` — создать привычку: `{"name":"Читать"}`, требуется `access_token`.
-- `GET /habits` — список своих привычек, требуется `access_token`.
+- `GET /habits` — страница своих привычек (опционально `?limit=20&offset=0`, `limit` от 1 до 100), ответ `200 {"items":[...],"limit":20,"offset":0,"total":...}`, требуется `access_token`.
 - `POST /habits/{id}/check` — отметить привычку за сегодня, требуется `access_token`.
-- `GET /habits/{id}/checks` — список отметок привычки по дням, требуется `access_token`.
+- `GET /habits/{id}/checks` — страница отметок привычки по дням (опционально `?limit=20&offset=0`, `limit` от 1 до 100), ответ `200 {"items":[...],"limit":20,"offset":0,"total":...}`, требуется `access_token`.
 
 Для защищённых маршрутов передавайте `access_token` в заголовке `Authorization: Bearer <access_token>` (`refresh_token` вместо `access_token` не принимается).
 
 ## Ошибки
 
-- `400` — неверный формат запроса или обязательные поля не заполнены.
+- `400` — неверный формат запроса, обязательные поля не заполнены или некорректные параметры пагинации (`limit`/`offset`).
 - `401` — отсутствует или недействителен токен; либо неверны email или пароль.
 - `403` — привычка принадлежит другому пользователю.
 - `404` — привычка не найдена.

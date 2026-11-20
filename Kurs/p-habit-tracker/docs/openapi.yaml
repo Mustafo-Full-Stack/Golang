@@ -6,6 +6,8 @@
 # Обновлено под актуальную версию из `habit-tracker`:
 #   - `POST /login` возвращает пару токенов: `access_token` и `refresh_token`;
 #   - для доступа к `/habits...` принимается только `access_token` (`refresh_token` вернёт 401);
+#   - `GET /habits` и `GET /habits/{id}/checks` поддерживают пагинацию `limit`/`offset`
+#     и возвращают объект `{items, limit, offset, total}` (`HabitList` и `HabitCheckList`);
 #   - примеры ошибок приведены к реальным ответам сервера на английском языке.
 # ============================================================================
 
@@ -156,19 +158,34 @@ paths:
     get:
       tags: [habits]
       summary: Список привычек пользователя
-      description: Возвращает все привычки текущего пользователя, отсортированные по `id`.
+      description: Возвращает страницу привычек текущего пользователя, отсортированных по `id`.
       operationId: listHabits
       security:
         - bearerAuth: []
+      # Необязательные query-параметры пагинации (?limit=20&offset=0)
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
-          description: Список привычек
+          description: Список привычек с параметрами пагинации
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Habit'
+                $ref: '#/components/schemas/HabitList'
+        '400':
+          description: Некорректные параметры `limit` или `offset`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidLimit:
+                  value: { error: invalid limit }
+                limitOutOfRange:
+                  value: { error: 'invalid input: limit must be between 1 and 100' }
+                offsetNegative:
+                  value: { error: 'invalid input: offset must be zero or greater' }
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
@@ -220,28 +237,34 @@ paths:
     get:
       tags: [habits]
       summary: История отметок привычки
-      description: Возвращает все даты выполнения указанной привычки, отсортированные по возрастанию даты.
+      description: Возвращает страницу дат выполнения указанной привычки, отсортированных по возрастанию даты.
       operationId: listChecks
       security:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/HabitID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
-          description: Список дат выполнения
+          description: Список дат выполнения с параметрами пагинации
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/HabitCheck'
+                $ref: '#/components/schemas/HabitCheckList'
         '400':
-          description: Некорректный ID привычки в URL
+          description: Некорректный ID привычки в URL или некорректные `limit`/`offset`
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-              example: { error: invalid habit ID }
+              examples:
+                invalidID:
+                  value: { error: invalid habit ID }
+                invalidLimit:
+                  value: { error: invalid limit }
+                limitOutOfRange:
+                  value: { error: 'invalid input: limit must be between 1 and 100' }
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -268,6 +291,26 @@ components:
         type: integer
         format: int64
         example: 1
+    # Параметры пагинации в query-строке URL (?limit=20&offset=0)
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Размер страницы. По умолчанию 20, от 1 до 100.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Offset:
+      name: offset
+      in: query
+      required: false
+      description: Сколько записей пропустить с начала. По умолчанию 0.
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
 
   responses:
     Unauthorized:
@@ -391,6 +434,26 @@ components:
           format: date-time
           example: '2026-11-15T12:00:00Z'
 
+    # Страница привычек с метаданными пагинации (соответствует listResponse[habitResponse])
+    HabitList:
+      type: object
+      required: [items, limit, offset, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Habit'
+        limit:
+          type: integer
+          example: 20
+        offset:
+          type: integer
+          example: 0
+        total:
+          type: integer
+          format: int64
+          example: 15
+
     CheckHabitResponse:
       type: object
       required: [status]
@@ -408,6 +471,26 @@ components:
           format: date
           description: Дата выполнения в формате YYYY-MM-DD (UTC).
           example: '2026-11-15'
+
+    # Страница отметок привычки с метаданными пагинации (соответствует listResponse[checkResponse])
+    HabitCheckList:
+      type: object
+      required: [items, limit, offset, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HabitCheck'
+        limit:
+          type: integer
+          example: 20
+        offset:
+          type: integer
+          example: 0
+        total:
+          type: integer
+          format: int64
+          example: 15
 
     Error:
       type: object

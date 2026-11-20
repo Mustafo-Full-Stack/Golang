@@ -203,7 +203,7 @@ habit-tracker/                        <-- Главная папка (корен�
 * Что лежит внутри:
   - В `user/postgres.go`: методы `Create` (`INSERT INTO users`), `GetByEmail` (`SELECT ... FROM users`)
     и проверка дубликата почты `isUniqueViolation` (код ошибки PostgreSQL `23505`).
-  - В `habit/postgres.go`: методы `Create`, `ListByUser`, `GetByID`, `CreateCheck`, `ListChecks`.
+  - В `habit/postgres.go`: методы `Create`, `ListByUser` (с `LIMIT`/`OFFSET`), `CountByUser`, `GetByID`, `CreateCheck`, `ListChecks` (с `LIMIT`/`OFFSET`), `CountChecks` и общий помощник `countByID`.
 
 --------------------------------------------------------------------------------
 📁 7. `internal/service` → `auth` и `habit` (Файлы `auth.go` и `habit.go`)
@@ -223,7 +223,9 @@ habit-tracker/                        <-- Главная папка (корен�
     * `Authenticate` — проверяет подпись JWT-токена и достаёт из него `userID`;
     * `createToken` — запечатывает `userID` и срок годности в строку JWT.
   - В `service/habit/habit.go`:
+    * интерфейс `Repository` (7 методов для работы с БД);
     * `Create`, `List`, `Check`, `Checks`;
+    * `validatePagination` — проверяет `limit` (`1..100`) и `offset` (`>= 0`);
     * `checkOwner` — проверяет, что привычка существует (иначе 404) и принадлежит этому
       пользователю (иначе 403 Forbidden).
 
@@ -240,7 +242,7 @@ habit-tracker/                        <-- Главная папка (корен�
   1) `handler.go` — структура `Handler`, карта маршрутов `Router()` и функции ответа `writeJSON`, `writeError`, `writeErr`.
   2) `middleware.go` — охранник `authMiddleware` (проверяет `Authorization: Bearer <токен>`) и `currentUserID(r)`.
   3) `auth.go` — обработчики `signUp` (`POST /sign-up`) и `login` (`POST /login`).
-  4) `habit.go` — обработчики `createHabit`, `listHabits`, `checkHabit`, `listChecks` и `parseID`.
+  4) `habit.go` — дженерик-ответ `listResponse[T]`, обработчики `createHabit`, `listHabits`, `checkHabit`, `listChecks` и помощники `parseID`, `parsePagination`, `queryInt`.
 
 --------------------------------------------------------------------------------
 📁 9. `internal/app` (Файл `app.go`)
@@ -360,15 +362,15 @@ habit-tracker/                        <-- Главная папка (корен�
      -H "Content-Type: application/json" \
      -d '{"name":"Пить 2 литра воды"}'
 
-   # 4) Список своих привычек (GET /habits) -> вернёт 200 OK
-   curl -i http://localhost:8080/habits \
+   # 4) Список своих привычек с пагинацией (GET /habits) -> вернёт 200 {"items":[...],"limit":20,"offset":0,"total":...}
+   curl -i "http://localhost:8080/habits?limit=20&offset=0" \
      -H "Authorization: Bearer $TOKEN"
 
    # 5) Отметить привычку №1 выполненной сегодня (POST /habits/1/check) -> вернёт 201 {"status":"checked"}
    curl -i -X POST http://localhost:8080/habits/1/check \
      -H "Authorization: Bearer $TOKEN"
 
-   # 6) Посмотреть историю выполнения привычки №1 (GET /habits/1/checks) -> вернёт 200 [{"date":"..."}]
-   curl -i http://localhost:8080/habits/1/checks \
+   # 6) Посмотреть историю выполнения привычки №1 (GET /habits/1/checks) -> вернёт 200 {"items":[{"date":"..."}],"limit":20,"offset":0,"total":...}
+   curl -i "http://localhost:8080/habits/1/checks?limit=20&offset=0" \
      -H "Authorization: Bearer $TOKEN"
 ================================================================================
